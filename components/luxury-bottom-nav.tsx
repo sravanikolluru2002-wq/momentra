@@ -8,7 +8,7 @@ import {
 } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type NavKey = "Home" | "Explore" | "Moments" | "Offers" | "Profile";
@@ -34,18 +34,28 @@ type LuxuryBottomNavProps = {
 export function LuxuryBottomNav({ active }: LuxuryBottomNavProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === "web";
+  const webWidth = Math.min(Math.max(width - 48, 320), 760);
 
   return (
     <View
       pointerEvents="box-none"
       style={[
         styles.wrap,
-        {
-          bottom: Math.max(insets.bottom, Platform.OS === "ios" ? 12 : 10),
-        },
+        isWeb
+          ? {
+              bottom: 22,
+              left: Math.max((width - webWidth) / 2, 24),
+              right: undefined,
+              width: webWidth,
+            }
+          : {
+              bottom: Math.max(insets.bottom, Platform.OS === "ios" ? 12 : 10),
+            },
       ]}
     >
-      <View style={styles.bar}>
+      <View style={[styles.bar, isWeb && styles.webBar]}>
         {NAV_ITEMS.map((item) => {
           const isActive = item.label === active;
 
@@ -144,6 +154,11 @@ const styles = StyleSheet.create({
     shadowOffset: { height: 12, width: 0 },
     shadowOpacity: 0.42,
     shadowRadius: 24,
+  },
+  webBar: {
+    backgroundColor: "rgba(13,9,5,0.72)",
+    borderColor: "rgba(228,185,122,0.22)",
+    height: 76,
   },
   item: {
     alignItems: "center",

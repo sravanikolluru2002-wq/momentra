@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -9,6 +10,7 @@ import {
 } from "react-native";
 
 import { DARK, formatINR } from "@/constants/experiences";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 
 export default function BookingConfirmationScreen() {
   const router = useRouter();
@@ -23,6 +25,25 @@ export default function BookingConfirmationScreen() {
     venue?: string;
   }>();
   const total = Number.parseFloat(params.total ?? "") || 0;
+
+  if (Platform.OS === "web") {
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Talk to Momentra"
+        subtitle="Your web enquiry details are ready to share. Momentra will help verify availability, refine the plan, and coordinate the experience end-to-end."
+        summary={[
+          { label: "Experience", value: params.experienceTitle ?? "Momentra Experience" },
+          { label: "Venue", value: params.venue ?? "Momentra Venue" },
+          { label: "Date", value: params.date ?? "-" },
+          { label: "Time", value: params.time ?? "-" },
+          { label: "Guests", value: `${params.guests ?? "1"} People` },
+          { label: "Estimated Plan", value: formatINR(total) },
+        ]}
+        title="Request Shared"
+        whatsappCategory="general"
+      />
+    );
+  }
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: DARK.bg }]}>

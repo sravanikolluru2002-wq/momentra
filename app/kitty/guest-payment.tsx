@@ -8,6 +8,7 @@ import { findKittyPackage, findKittyVenue } from "@/constants/kitty";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { startPayment } from "@/lib/razorpay";
 import { supabase } from "@/lib/supabase";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 
 export default function KittyGuestPaymentScreen() {
   const router = useRouter();
@@ -34,6 +35,27 @@ export default function KittyGuestPaymentScreen() {
   const fullGuestName = getFullGuestName(params.invitedGuests);
   const guestName = fullGuestName.split(" ")[0] || "Priya";
   const minimum = Number.parseInt(params.minimumGuestThreshold ?? "1", 10) || 1;
+
+  if (Platform.OS === "web") {
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Talk to Momentra"
+        secondaryHref="/kitty"
+        secondaryLabel="Back to Kitty Circle"
+        subtitle="Guest share payment is not public on web yet. Use this page to contact Momentra and confirm the next step for your invite."
+        summary={[
+          { label: "Guest", value: fullGuestName },
+          { label: "Venue", value: venue.name },
+          { label: "Package", value: selectedPackage.name },
+          { label: "Date", value: params.bookingDate ?? "Preferred date" },
+          { label: "Time", value: params.bookingTime ?? "Preferred time" },
+          { label: "Per-person plan", value: `₹${selectedPackage.perHead.toLocaleString("en-IN")}` },
+        ]}
+        title="Reserve Your Spot"
+        whatsappCategory="kitty"
+      />
+    );
+  }
 
   async function payShare() {
     if (processing) return;

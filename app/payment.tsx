@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -10,6 +11,8 @@ import {
 } from "react-native";
 
 import { DARK, formatINR, getExperience } from "@/constants/experiences";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
+import { whatsappCategoryFromOccasion } from "@/lib/whatsapp";
 
 export default function PaymentScreen() {
   const router = useRouter();
@@ -30,6 +33,23 @@ export default function PaymentScreen() {
   const total = experience.price + selectedAddOns.reduce((sum, addOn) => sum + addOn.price, 0);
   const date = params.date ?? "12 May 2026";
   const time = params.time ?? "8:00 PM";
+
+  if (Platform.OS === "web") {
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Talk to Momentra"
+        subtitle="Share your preferred experience details and Momentra will help confirm availability, refine the plan, and guide the next steps."
+        summary={[
+          { label: "Experience", value: experience.title },
+          { label: "Date", value: date },
+          { label: "Time", value: time },
+          { label: "Estimated Plan", value: formatINR(total) },
+        ]}
+        title="Request Availability"
+        whatsappCategory={whatsappCategoryFromOccasion(experience.occasionId)}
+      />
+    );
+  }
 
   function pay() {
     setProcessing(true);

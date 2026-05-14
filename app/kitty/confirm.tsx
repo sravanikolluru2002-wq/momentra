@@ -4,6 +4,7 @@ import { Image, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, Vi
 import { DARK, LIGHT } from "@/constants/experiences";
 import { findKittyPackage, findKittyVenue, kittyTotal } from "@/constants/kitty";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 
 export default function KittyConfirmScreen() {
   const router = useRouter();
@@ -31,6 +32,27 @@ export default function KittyConfirmScreen() {
   const splitSummary = params.splitBooking === "true"
     ? `; Split booking: yes; Organizer: ${params.organizerName}; Minimum guests: ${params.minimumGuestThreshold}; Deadline: ${params.paymentDeadline}`
     : "";
+
+  if (Platform.OS === "web") {
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Request Availability"
+        secondaryHref="/kitty"
+        secondaryLabel="Back to Kitty Circle"
+        subtitle="Kitty bookings on web are handled as guided enquiries for now. Share your details and Momentra will help confirm availability and coordinate your group."
+        summary={[
+          { label: "Venue", value: venue.name },
+          { label: "Package", value: selectedPackage.name },
+          { label: "Date", value: bookingDate || "Preferred date" },
+          { label: "Time", value: bookingTime },
+          { label: "Guests", value: `${guests} guests` },
+          { label: "Estimated Plan", value: `₹${total.toLocaleString("en-IN")}` },
+        ]}
+        title="Plan Your Kitty Circle"
+        whatsappCategory="kitty"
+      />
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: T.bg }]}>

@@ -5,7 +5,6 @@ import {
   Animated,
   Dimensions,
   Image,
-  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -18,11 +17,11 @@ import {
 import { DARK, LIGHT } from "@/constants/experiences";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
+import { openWhatsApp as openMomentraWhatsApp, WhatsAppCategory } from "@/lib/whatsapp";
 
 const { width } = Dimensions.get("window");
 const CARD_W = (width - 32 - 18) / 3;
 const TREND_W = 175;
-const WA_NUMBER = "+919876543210";
 
 type OccasionItem = {
   desc: string;
@@ -151,13 +150,8 @@ export default function HomeScreen() {
     return () => animation.stop();
   }, [pulseAnim]);
 
-  function openWhatsApp(message = "") {
-    const msg = encodeURIComponent(
-      message || "Hi Momentra! I'd like to know more about your experiences."
-    );
-    Linking.openURL(`https://wa.me/${WA_NUMBER.replace(/\D/g, "")}?text=${msg}`).catch((error) => {
-      console.error("WHATSAPP OPEN ERROR:", error);
-    });
+  function openWhatsApp(category: WhatsAppCategory) {
+    openMomentraWhatsApp(category);
   }
 
   function openOccasion(item: OccasionItem) {
@@ -381,7 +375,7 @@ export default function HomeScreen() {
                 <Text style={styles.kittyBtnTxt}>Explore Kitty Packages</Text>
               </Pressable>
               <Pressable
-                onPress={() => openWhatsApp("Hi! I'm interested in a Kitty Party package.")}
+                onPress={() => openWhatsApp("kitty")}
                 style={styles.kittyWaBtn}
               >
                 <Text style={styles.kittyWaIcon}>📞</Text>
@@ -440,7 +434,7 @@ export default function HomeScreen() {
 
         <View style={[styles.section, styles.waSection]}>
           <Pressable
-            onPress={() => openWhatsApp("Hi Momentra! I'd like help planning a celebration.")}
+            onPress={() => openWhatsApp("general")}
             style={styles.waStrip}
           >
             <View style={styles.waIcon}>

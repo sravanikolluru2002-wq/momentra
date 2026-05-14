@@ -23,7 +23,11 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "Momentra",
+      "shortName": "Momentra",
+      "themeColor": "#0D0905",
+      "backgroundColor": "#0D0905"
     },
     "plugins": [
       "expo-router",

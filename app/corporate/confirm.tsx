@@ -4,6 +4,7 @@ import { Image, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, Vi
 import { CORPORATE_REQUIREMENTS, corporateTotal, findCorporateEventType, findCorporateVenue } from "@/constants/corporate";
 import { DARK, LIGHT } from "@/constants/experiences";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { openWhatsApp as openMomentraWhatsApp } from "@/lib/whatsapp";
 
 export default function CorporateConfirmScreen() {
   const router = useRouter();
@@ -47,6 +48,10 @@ export default function CorporateConfirmScreen() {
     `Billing: ${params.billingAddress || "Not provided"}`,
     params.notes ? `Notes: ${params.notes}` : "",
   ].filter(Boolean).join("; ");
+
+  function requestCorporatePlan() {
+    openMomentraWhatsApp("corporate", "CORPORATE WEB WHATSAPP ERROR");
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: T.bg }]}>
@@ -103,7 +108,12 @@ export default function CorporateConfirmScreen() {
 
       <View style={[styles.footer, { backgroundColor: T.bg, borderTopColor: T.border }]}>
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            if (Platform.OS === "web") {
+              requestCorporatePlan();
+              return;
+            }
+
             router.push({
               pathname: "/booking-summary",
               params: {
@@ -116,12 +126,12 @@ export default function CorporateConfirmScreen() {
                 time: params.time ?? "",
                 venue: venue.location,
               },
-            } as never)
-          }
+            } as never);
+          }}
           style={[styles.cta, { backgroundColor: T.red }]}
         >
-          <Text style={styles.ctaTxt}>Confirm & Pay</Text>
-          <Text style={styles.ctaSub}>₹{total.toLocaleString("en-IN")} →</Text>
+          <Text style={styles.ctaTxt}>{Platform.OS === "web" ? "Request Formal Quote" : "Confirm & Pay"}</Text>
+          <Text style={styles.ctaSub}>{Platform.OS === "web" ? "Talk to Momentra" : `₹${total.toLocaleString("en-IN")} →`}</Text>
         </Pressable>
       </View>
     </View>

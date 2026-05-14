@@ -5,6 +5,7 @@ import { Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput
 import { DARK, LIGHT } from "@/constants/experiences";
 import { findKittyPackage, findKittyVenue, kittyTotal } from "@/constants/kitty";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 
 type Guest = { name: string; phone: string };
 
@@ -33,6 +34,30 @@ export default function KittySplitSetupScreen() {
   const [paymentDeadline, setPaymentDeadline] = useState("5 days");
   const total = kittyTotal(selectedPackage.perHead, guests.length);
   const invitedGuests = useMemo(() => JSON.stringify(guests), [guests]);
+
+  if (Platform.OS === "web") {
+    const webGuests = Number.parseInt(params.guests ?? "12", 10) || 12;
+    const webTotal = kittyTotal(selectedPackage.perHead, webGuests);
+
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Get Custom Plan"
+        secondaryHref="/kitty"
+        secondaryLabel="Back to Kitty Circle"
+        subtitle="Share your group size, preferred date, and venue interest, and Momentra will help coordinate the plan for your circle."
+        summary={[
+          { label: "Venue", value: venue.name },
+          { label: "Package", value: selectedPackage.name },
+          { label: "Date", value: params.bookingDate ?? "Preferred date" },
+          { label: "Time", value: params.bookingTime ?? "Preferred time" },
+          { label: "Guests", value: `${webGuests} guests` },
+          { label: "Estimated Plan", value: `₹${webTotal.toLocaleString("en-IN")}` },
+        ]}
+        title="Plan Your Kitty Circle"
+        whatsappCategory="kitty"
+      />
+    );
+  }
 
   if (params.mode !== "setup") {
     const fullPayGuests = Number.parseInt(params.guests ?? "12", 10) || 12;

@@ -5,6 +5,7 @@ import { Calendar, DateData } from "react-native-calendars";
 import {
   ImageBackground,
   ImageSourcePropType,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -17,6 +18,7 @@ import {
 import { DARK, EXPERIENCES, formatINR, getExperience } from "@/constants/experiences";
 import type { AddOn, Experience } from "@/constants/experiences";
 import { supabase } from "@/lib/supabase";
+import { openWhatsApp as openMomentraWhatsApp, whatsappCategoryFromOccasion } from "@/lib/whatsapp";
 
 const TIMES = ["7:00 PM", "8:00 PM", "9:00 PM", "Custom"];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -74,6 +76,10 @@ export default function ExperienceDetailScreen() {
     [experience.addOns, selectedAddOns]
   );
   const total = experience.price + addOnTotal;
+
+  function requestAvailability() {
+    openMomentraWhatsApp(whatsappCategoryFromOccasion(experience.occasionId), "EXPERIENCE WEB WHATSAPP ERROR");
+  }
 
   function toggleAddOn(id: string) {
     setSelectedAddOns((current) =>
@@ -290,7 +296,12 @@ export default function ExperienceDetailScreen() {
 
       <View style={[styles.footer, { backgroundColor: theme.bg, borderTopColor: theme.border }]}>
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            if (Platform.OS === "web") {
+              requestAvailability();
+              return;
+            }
+
             router.push({
               pathname: "/booking-summary",
               params: {
@@ -305,12 +316,12 @@ export default function ExperienceDetailScreen() {
                 time,
                 venue: experience.venue,
               },
-            } as never)
-          }
+            } as never);
+          }}
           style={[styles.cta, { backgroundColor: theme.red }]}
         >
-          <Text style={styles.ctaText}>Continue to Summary</Text>
-          <Text style={styles.ctaPrice}>{formatINR(total)}</Text>
+          <Text style={styles.ctaText}>{Platform.OS === "web" ? "Request Availability" : "Continue to Summary"}</Text>
+          <Text style={styles.ctaPrice}>{Platform.OS === "web" ? "Talk to Momentra" : formatINR(total)}</Text>
         </Pressable>
       </View>
     </SafeAreaView>

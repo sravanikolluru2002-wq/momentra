@@ -4,6 +4,7 @@ import { Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } fr
 import { DARK, LIGHT } from "@/constants/experiences";
 import { findKittyPackage } from "@/constants/kitty";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 
 type GuestStatus = { name: string; phone: string; status: "paid" | "pending" | "declined" };
 
@@ -39,6 +40,26 @@ export default function KittyPaymentTrackerScreen() {
   const total = guests.length * selectedPackage.perHead;
   const progress = guests.length ? Math.round((paid.length / guests.length) * 100) : 0;
   const thresholdReached = params.splitStatus === "confirmed" || paid.length >= minimum;
+
+  if (Platform.OS === "web") {
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Talk to Momentra"
+        secondaryHref="/kitty"
+        secondaryLabel="Back to Kitty Circle"
+        subtitle="The live payment tracker is not public on web right now. Momentra can help coordinate confirmations, reminders, and availability directly."
+        summary={[
+          { label: "Package", value: selectedPackage.name },
+          { label: "Date", value: params.bookingDate ?? "Preferred date" },
+          { label: "Time", value: params.bookingTime ?? "Preferred time" },
+          { label: "Invited", value: `${guests.length} guests` },
+          { label: "Minimum", value: `${minimum} guests` },
+        ]}
+        title="Circle Coordination"
+        whatsappCategory="kitty"
+      />
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: T.bg }]}>

@@ -8,6 +8,7 @@ import { DARK, LIGHT } from "@/constants/experiences";
 import { findKittyPackage, findKittyVenue, kittyTotal } from "@/constants/kitty";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { supabase } from "@/lib/supabase";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 
 export default function KittyInvitePreviewScreen() {
   const router = useRouter();
@@ -34,6 +35,27 @@ export default function KittyInvitePreviewScreen() {
   const guestCount = Number.parseInt(params.guests ?? "8", 10) || 8;
   const minimum = Number.parseInt(params.minimumGuestThreshold ?? "1", 10) || 1;
   const total = kittyTotal(selectedPackage.perHead, guestCount);
+
+  if (Platform.OS === "web") {
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Talk to Momentra"
+        secondaryHref="/kitty"
+        secondaryLabel="Back to Kitty Circle"
+        subtitle="Guest invite and payment collection tools are being kept private on web for now. Momentra can still help you coordinate invites, availability, and group readiness."
+        summary={[
+          { label: "Venue", value: venue.name },
+          { label: "Package", value: selectedPackage.name },
+          { label: "Date", value: params.bookingDate ?? "Preferred date" },
+          { label: "Time", value: params.bookingTime ?? "Preferred time" },
+          { label: "Guests", value: `${guestCount} guests` },
+          { label: "Minimum", value: `${minimum} guests` },
+        ]}
+        title="Coordinate Your Circle"
+        whatsappCategory="kitty"
+      />
+    );
+  }
 
   async function createPendingSplitBooking() {
     if (creatingBooking) return;

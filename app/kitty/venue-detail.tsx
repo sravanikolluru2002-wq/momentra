@@ -1,10 +1,11 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Image, Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 
 import { DARK, LIGHT } from "@/constants/experiences";
 import { findKittyPackage, findKittyVenue } from "@/constants/kitty";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { openWhatsApp as openMomentraWhatsApp } from "@/lib/whatsapp";
 
 export default function KittyVenueDetailScreen() {
   const router = useRouter();
@@ -18,10 +19,7 @@ export default function KittyVenueDetailScreen() {
   const bookingTime = params.bookingTime ?? "11:30 AM - 2:30 PM";
 
   function openWhatsApp() {
-    const message = encodeURIComponent(`Hi Momentra! I have questions about ${venue.name} for a Kitty Circle booking.`);
-    Linking.openURL(`https://wa.me/919876543210?text=${message}`).catch((error) => {
-      console.error("KITTY WHATSAPP OPEN ERROR:", error);
-    });
+    openMomentraWhatsApp("venue", "KITTY WHATSAPP OPEN ERROR");
   }
 
   return (
@@ -149,7 +147,12 @@ export default function KittyVenueDetailScreen() {
 
       <View style={[styles.footer, { backgroundColor: T.bg, borderTopColor: T.border }]}>
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            if (Platform.OS === "web") {
+              openWhatsApp();
+              return;
+            }
+
             router.push({
               pathname: "/kitty/split",
               params: {
@@ -159,12 +162,12 @@ export default function KittyVenueDetailScreen() {
                 packageId: selectedPackage.id,
                 venueId: venue.id,
               },
-            } as never)
-          }
+            } as never);
+          }}
           style={[styles.cta, { backgroundColor: T.red }]}
         >
-          <Text style={styles.ctaTxt}>Book This Venue</Text>
-          <Text style={styles.ctaSub}>₹{selectedPackage.perHead.toLocaleString("en-IN")}/head →</Text>
+          <Text style={styles.ctaTxt}>{Platform.OS === "web" ? "Request Availability" : "Book This Venue"}</Text>
+          <Text style={styles.ctaSub}>{Platform.OS === "web" ? "Talk to Momentra" : `₹${selectedPackage.perHead.toLocaleString("en-IN")}/head →`}</Text>
         </Pressable>
       </View>
     </View>

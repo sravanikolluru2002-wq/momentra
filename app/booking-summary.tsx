@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   Image,
   ImageSourcePropType,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -15,6 +16,8 @@ import {
 import { DARK, formatINR, getExperience } from "@/constants/experiences";
 import { startPayment } from "@/lib/razorpay";
 import { supabase } from "@/lib/supabase";
+import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
+import { whatsappCategoryFromOccasion } from "@/lib/whatsapp";
 
 const KITTY_PARTY_IMAGE = require("../assets/kitty-party.png");
 
@@ -76,6 +79,25 @@ export default function BookingSummaryScreen() {
   const experienceTitle = params.experienceTitle ?? experience.title;
   const venue = params.venue ?? experience.venue;
   const request = params.request ?? "";
+
+  if (Platform.OS === "web") {
+    return (
+      <WebEnquiryScreen
+        primaryLabel="Request Availability"
+        subtitle="This web experience is set up for guided discovery right now. Send your preferred date, time, guest count, and any special requests, and Momentra will help you shape the plan."
+        summary={[
+          { label: "Experience", value: experienceTitle },
+          { label: "Venue", value: venue },
+          { label: "Date", value: date },
+          { label: "Time", value: time },
+          { label: "Guests", value: `${guests} People` },
+          { label: "Estimated Plan", value: formatINR(total) },
+        ]}
+        title="Plan This Experience"
+        whatsappCategory={whatsappCategoryFromOccasion(experience.occasionId)}
+      />
+    );
+  }
 
   async function confirmBooking() {
     if (saving) return;

@@ -1,11 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { Image, Linking, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 
 import { corporateTotal, findCorporateEventType, findCorporateVenue } from "@/constants/corporate";
 import { DARK, LIGHT } from "@/constants/experiences";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { openWhatsApp as openMomentraWhatsApp } from "@/lib/whatsapp";
 
 export default function CorporateVenueDetailScreen() {
   const router = useRouter();
@@ -35,10 +36,7 @@ export default function CorporateVenueDetailScreen() {
   const total = corporateTotal(venue.perHead, guests);
 
   function openWhatsApp() {
-    const message = encodeURIComponent(`Hi Momentra! I need help with a corporate ${eventType.label} at ${venue.name}.`);
-    Linking.openURL(`https://wa.me/919876543210?text=${message}`).catch((error) => {
-      console.error("CORPORATE WHATSAPP OPEN ERROR:", error);
-    });
+    openMomentraWhatsApp("venue", "CORPORATE WHATSAPP OPEN ERROR");
   }
 
   return (
@@ -142,16 +140,21 @@ export default function CorporateVenueDetailScreen() {
 
       <View style={[styles.footer, { backgroundColor: T.bg, borderTopColor: T.border }]}>
         <Pressable
-          onPress={() =>
+          onPress={() => {
+            if (Platform.OS === "web") {
+              openWhatsApp();
+              return;
+            }
+
             router.push({
               pathname: "/corporate/confirm",
               params: { ...params, venueId: venue.id },
-            } as never)
-          }
+            } as never);
+          }}
           style={[styles.cta, { backgroundColor: T.red }]}
         >
-          <Text style={styles.ctaTxt}>Confirm & Book Directly</Text>
-          <Text style={styles.ctaSub}>₹{total.toLocaleString("en-IN")} →</Text>
+          <Text style={styles.ctaTxt}>{Platform.OS === "web" ? "Get Custom Plan" : "Confirm & Book Directly"}</Text>
+          <Text style={styles.ctaSub}>{Platform.OS === "web" ? "Talk to Momentra" : `₹${total.toLocaleString("en-IN")} →`}</Text>
         </Pressable>
         <Text style={[styles.gstLine, { color: T.text3 }]}>Includes GST estimate · Subtotal ₹{subtotal.toLocaleString("en-IN")}</Text>
       </View>
