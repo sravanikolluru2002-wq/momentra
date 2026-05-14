@@ -3,22 +3,50 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { MomentraThemeProvider } from '@/contexts/momentra-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: 'login',
 };
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <MomentraThemeProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          <Stack.Screen name="home" options={{ headerShown: false }} />
+          <Stack.Screen name="explore" options={{ headerShown: false }} />
+          <Stack.Screen name="moments" options={{ headerShown: false }} />
+          <Stack.Screen name="offers" options={{ headerShown: false }} />
+          <Stack.Screen name="profile" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/index" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/venues" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/venue-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/split" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/invite-preview" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/payment-tracker" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/guest-payment" options={{ headerShown: false }} />
+          <Stack.Screen name="kitty/confirm" options={{ headerShown: false }} />
+          <Stack.Screen name="corporate/index" options={{ headerShown: false }} />
+          <Stack.Screen name="corporate/details" options={{ headerShown: false }} />
+          <Stack.Screen name="corporate/venues" options={{ headerShown: false }} />
+          <Stack.Screen name="corporate/venue-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="corporate/confirm" options={{ headerShown: false }} />
+          <Stack.Screen name="experiences" options={{ headerShown: false }} />
+          <Stack.Screen name="experience-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="booking-summary" options={{ headerShown: false }} />
+          <Stack.Screen name="booking-confirmation" options={{ headerShown: false }} />
+          <Stack.Screen name="payment" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ headerShown: false, presentation: 'modal' }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </MomentraThemeProvider>
   );
 }
