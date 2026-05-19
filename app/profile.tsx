@@ -17,6 +17,7 @@ import {
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
 import { firebaseAuth } from "@/firebase/config";
+import { resetRecaptchaVerifier } from "@/lib/firebase/recaptcha";
 
 const DARK = {
   bg: "#0D0905",
@@ -179,6 +180,7 @@ export default function ProfileScreen() {
 
   async function performLogout() {
     await signOut(firebaseAuth);
+    resetRecaptchaVerifier();
     router.replace("/login" as never);
   }
 

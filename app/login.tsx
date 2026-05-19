@@ -2,7 +2,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import {
   ConfirmationResult,
-  RecaptchaVerifier,
   User,
   onAuthStateChanged,
   signInWithPhoneNumber,
@@ -24,6 +23,12 @@ import {
 
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
+import {
+  RECAPTCHA_CONTAINER_ID,
+  ensureSingleRecaptchaContainer,
+  getRecaptchaVerifier,
+  resetRecaptchaVerifier,
+} from "@/lib/firebase/recaptcha";
 import { supabase } from "@/lib/supabase";
 
 const DARK = {
@@ -66,9 +71,6 @@ type AuthMode = "login" | "signup";
 type LoginStep = "phone" | "otp" | "welcome";
 
 const USER_SELECT = "id,firebase_uid,phone_number";
-const RECAPTCHA_CONTAINER_ID = "recaptcha-container";
-
-let recaptchaVerifier: RecaptchaVerifier | null = null;
 
 function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
@@ -95,49 +97,6 @@ async function updateExistingUserLogin(user: User, phoneNumber: string) {
     .eq("phone_number", phoneNumber);
 
   if (error) throw error;
-}
-
-function removeDuplicateRecaptchaContainers() {
-  if (typeof document === "undefined") return;
-
-  const containers = Array.from(document.querySelectorAll(`[id="${RECAPTCHA_CONTAINER_ID}"]`));
-
-  containers.slice(1).forEach((container) => {
-    container.parentElement?.removeChild(container);
-  });
-}
-
-function getRecaptchaVerifier() {
-  removeDuplicateRecaptchaContainers();
-
-  if (recaptchaVerifier) {
-    console.log("Using existing recaptcha verifier");
-    return recaptchaVerifier;
-  }
-
-  const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
-
-  if (!container) {
-    throw new Error("Firebase reCAPTCHA container is not ready. Please try again.");
-  }
-
-  container.innerHTML = "";
-
-  recaptchaVerifier = new RecaptchaVerifier(firebaseAuth, RECAPTCHA_CONTAINER_ID, {
-    size: "invisible",
-  });
-
-  return recaptchaVerifier;
-}
-
-function resetRecaptchaVerifier() {
-  recaptchaVerifier?.clear();
-  recaptchaVerifier = null;
-
-  const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
-  if (container) {
-    container.innerHTML = "";
-  }
 }
 
 export default function LoginScreen() {
@@ -223,7 +182,7 @@ export default function LoginScreen() {
   }, [authMode, loginExistingUser]);
 
   useEffect(() => {
-    removeDuplicateRecaptchaContainers();
+    ensureSingleRecaptchaContainer();
   }, []);
 
   function switchMode(nextMode: AuthMode) {
@@ -257,7 +216,7 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const verifier = getRecaptchaVerifier();
+      const verifier = getRecaptchaVerifier(firebaseAuth);
       const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, verifier);
       setConfirmation(result);
       setStep("otp");
