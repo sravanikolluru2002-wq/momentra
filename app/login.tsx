@@ -7,7 +7,7 @@ import {
   onAuthStateChanged,
   signInWithPhoneNumber,
 } from "firebase/auth";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -66,7 +66,9 @@ type AuthMode = "login" | "signup";
 type LoginStep = "phone" | "otp" | "welcome";
 
 const USER_SELECT = "id,firebase_uid,phone_number";
-const RECAPTCHA_CONTAINER_ID = "firebase-recaptcha-container";
+const RECAPTCHA_CONTAINER_ID = "recaptcha-container";
+
+let recaptchaVerifier: RecaptchaVerifier | null = null;
 
 function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
@@ -95,6 +97,49 @@ async function updateExistingUserLogin(user: User, phoneNumber: string) {
   if (error) throw error;
 }
 
+function removeDuplicateRecaptchaContainers() {
+  if (typeof document === "undefined") return;
+
+  const containers = Array.from(document.querySelectorAll(`[id="${RECAPTCHA_CONTAINER_ID}"]`));
+
+  containers.slice(1).forEach((container) => {
+    container.parentElement?.removeChild(container);
+  });
+}
+
+function getRecaptchaVerifier() {
+  removeDuplicateRecaptchaContainers();
+
+  if (recaptchaVerifier) {
+    console.log("Using existing recaptcha verifier");
+    return recaptchaVerifier;
+  }
+
+  const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
+
+  if (!container) {
+    throw new Error("Firebase reCAPTCHA container is not ready. Please try again.");
+  }
+
+  container.innerHTML = "";
+
+  recaptchaVerifier = new RecaptchaVerifier(firebaseAuth, RECAPTCHA_CONTAINER_ID, {
+    size: "invisible",
+  });
+
+  return recaptchaVerifier;
+}
+
+function resetRecaptchaVerifier() {
+  recaptchaVerifier?.clear();
+  recaptchaVerifier = null;
+
+  const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
+  if (container) {
+    container.innerHTML = "";
+  }
+}
+
 export default function LoginScreen() {
   const { isDark } = useMomentraTheme();
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -105,8 +150,6 @@ export default function LoginScreen() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
-  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
-  const recaptchaRenderPromise = useRef<Promise<number> | null>(null);
   const theme = isDark ? DARK : LIGHT;
 
   const normalizedPhone = phone.replace(/\D/g, "");
@@ -180,48 +223,7 @@ export default function LoginScreen() {
   }, [authMode, loginExistingUser]);
 
   useEffect(() => {
-    return () => {
-      recaptchaVerifier.current?.clear();
-      recaptchaVerifier.current = null;
-      recaptchaRenderPromise.current = null;
-    };
-  }, []);
-
-  const getRecaptchaVerifier = useCallback(async () => {
-    if (recaptchaVerifier.current) {
-      if (!recaptchaRenderPromise.current) {
-        recaptchaRenderPromise.current = recaptchaVerifier.current.render();
-      }
-      await recaptchaRenderPromise.current;
-      return recaptchaVerifier.current;
-    }
-
-    const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
-
-    if (container) {
-      container.innerHTML = "";
-    }
-
-    const verifier = new RecaptchaVerifier(firebaseAuth, RECAPTCHA_CONTAINER_ID, {
-      size: "invisible",
-    });
-
-    recaptchaVerifier.current = verifier;
-    recaptchaRenderPromise.current = verifier.render();
-    await recaptchaRenderPromise.current;
-
-    return verifier;
-  }, []);
-
-  const resetRecaptchaVerifier = useCallback(() => {
-    recaptchaVerifier.current?.clear();
-    recaptchaVerifier.current = null;
-    recaptchaRenderPromise.current = null;
-
-    const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
-    if (container) {
-      container.innerHTML = "";
-    }
+    removeDuplicateRecaptchaContainers();
   }, []);
 
   function switchMode(nextMode: AuthMode) {
@@ -255,7 +257,7 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const verifier = await getRecaptchaVerifier();
+      const verifier = getRecaptchaVerifier();
       const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, verifier);
       setConfirmation(result);
       setStep("otp");
