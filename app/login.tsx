@@ -3,10 +3,11 @@ import { router } from "expo-router";
 import {
   ConfirmationResult,
   RecaptchaVerifier,
+  User,
   onAuthStateChanged,
   signInWithPhoneNumber,
 } from "firebase/auth";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -24,7 +25,6 @@ import {
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
 import { supabase } from "@/lib/supabase";
-import { syncFirebaseCustomerUser } from "@/lib/supabase/user-sync";
 
 const DARK = {
   bg: "#0D0905",
@@ -37,7 +37,6 @@ const DARK = {
   fieldBorder: "rgba(201,151,90,0.22)",
   featureBg: "rgba(192,57,43,0.12)",
   featureBorder: "rgba(201,151,90,0.16)",
-  divider: "rgba(201,151,90,0.14)",
   red: "#C0392B",
   red2: "#8E332A",
   gold: "#C9975A",
@@ -56,7 +55,6 @@ const LIGHT = {
   fieldBorder: "#DED1C7",
   featureBg: "#F8F2EC",
   featureBorder: "#EEE4DB",
-  divider: "#E9DDD4",
   red: "#7B2E26",
   red2: "#8E332A",
   gold: "#947C6C",
@@ -64,10 +62,41 @@ const LIGHT = {
   shadow: "#4B241C",
 };
 
-type LoginStep = "phone" | "otp";
+type AuthMode = "login" | "signup";
+type LoginStep = "phone" | "otp" | "welcome";
+
+const USER_SELECT = "id,firebase_uid,phone_number";
+
+function isMissingColumnError(message: string) {
+  return /column|schema cache|Could not find|does not exist/i.test(message);
+}
+
+async function findExistingUser(phoneNumber: string) {
+  const { data, error } = await supabase
+    .from("users")
+    .select(USER_SELECT)
+    .eq("phone_number", phoneNumber)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function updateExistingUserLogin(user: User, phoneNumber: string) {
+  const { error } = await supabase
+    .from("users")
+    .update({
+      firebase_uid: user.uid,
+      last_login: new Date().toISOString(),
+    })
+    .eq("phone_number", phoneNumber);
+
+  if (error) throw error;
+}
 
 export default function LoginScreen() {
   const { isDark } = useMomentraTheme();
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<LoginStep>("phone");
@@ -83,6 +112,55 @@ export default function LoginScreen() {
   const phoneValid = /^\d{10}$/.test(normalizedPhone);
   const otpValid = /^\d{6}$/.test(otp);
 
+  const showError = useCallback((text: string) => {
+    setError(text);
+    setMessage("");
+    if (Platform.OS !== "web") {
+      Alert.alert("Momentra login", text);
+    }
+  }, []);
+
+  const loginExistingUser = useCallback(
+    async (user: User) => {
+      const phoneNumber = user.phoneNumber ?? fullPhone;
+
+      if (!phoneNumber) {
+        showError("Firebase did not return a phone number. Please try again.");
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
+      try {
+        const existingUser = await findExistingUser(phoneNumber);
+
+        if (!existingUser) {
+          showError("No account found. Please sign up first.");
+          setStep("phone");
+          return;
+        }
+
+        await updateExistingUserLogin(user, phoneNumber);
+        setMessage("Welcome back");
+        setStep("welcome");
+        setTimeout(() => router.replace("/profile"), 650);
+      } catch (err) {
+        const text = err instanceof Error ? err.message : "Could not check your Momentra account.";
+        console.error("[Momentra auth] Supabase login lookup failed", err);
+
+        if (isMissingColumnError(text)) {
+          showError("Supabase users table needs phone_number, firebase_uid, and last_login columns.");
+        } else {
+          showError(text);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fullPhone, showError]
+  );
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       console.log("[Momentra auth] Firebase login auth state", {
@@ -91,20 +169,21 @@ export default function LoginScreen() {
         uid: user?.uid ?? null,
       });
 
-      if (user) {
-        router.replace("/profile");
+      if (authMode === "login" && user?.phoneNumber) {
+        loginExistingUser(user);
       }
     });
 
     return unsubscribe;
-  }, []);
+  }, [authMode, loginExistingUser]);
 
-  function showError(text: string) {
-    setError(text);
+  function switchMode(nextMode: AuthMode) {
+    setAuthMode(nextMode);
+    setStep("phone");
+    setOtp("");
     setMessage("");
-    if (Platform.OS !== "web") {
-      Alert.alert("Momentra login", text);
-    }
+    setError("");
+    setConfirmation(null);
   }
 
   async function sendOTP() {
@@ -136,8 +215,6 @@ export default function LoginScreen() {
       }
 
       const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, recaptchaVerifier.current);
-
-      console.log("[Momentra auth] Firebase OTP sent successfully", { phone: fullPhone });
       setConfirmation(result);
       setStep("otp");
       setMessage(`OTP sent to ${fullPhone}`);
@@ -151,7 +228,7 @@ export default function LoginScreen() {
     }
   }
 
-  async function verifyOTP() {
+  async function confirmFirebaseCode() {
     setError("");
     setMessage("");
 
@@ -169,20 +246,14 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const credential = await confirmation.confirm(otp);
-      const user = credential.user;
+      const { user } = await confirmation.confirm(otp);
 
-      console.log("[Momentra auth] Firebase OTP verified successfully", {
-        phone: user.phoneNumber ?? fullPhone,
-        uid: user.uid,
-      });
-
-      const sync = await syncFirebaseCustomerUser(supabase, user);
-      if (!sync.ok) {
-        console.warn("[Momentra auth] Supabase Firebase user sync warning", sync.error);
+      if (authMode === "signup") {
+        router.replace("/onboarding");
+        return;
       }
 
-      router.replace("/profile");
+      await loginExistingUser(user);
     } catch (err) {
       console.error("[Momentra auth] Firebase OTP verify failed", err);
       showError(err instanceof Error ? err.message : "Could not verify OTP.");
@@ -201,17 +272,11 @@ export default function LoginScreen() {
         pointerEvents="none"
         style={[
           styles.backgroundGlow,
-          {
-            backgroundColor: isDark ? "rgba(192,57,43,0.18)" : "rgba(192,57,43,0.08)",
-          },
+          { backgroundColor: isDark ? "rgba(192,57,43,0.18)" : "rgba(192,57,43,0.08)" },
         ]}
       />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.brandBlock}>
             <Image resizeMode="contain" source={require("../assets/logo.png")} style={styles.logoImage} />
             <Text style={[styles.phonetic, { color: theme.gold }]}>{"/'moh-men-truh/"}</Text>
@@ -220,52 +285,49 @@ export default function LoginScreen() {
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.panel,
-              {
-                backgroundColor: theme.panel,
-                borderColor: theme.panelBorder,
-                shadowColor: theme.shadow,
-              },
-            ]}
-          >
+          <View style={[styles.panel, { backgroundColor: theme.panel, borderColor: theme.panelBorder, shadowColor: theme.shadow }]}>
             <View style={styles.features}>
-              {["Verified celebration venues", "Curated add-ons and experiences", "Instant booking with secure checkout"].map(
-                (feature, index) => (
-                  <View
-                    key={feature}
-                    style={[
-                      styles.feature,
-                      {
-                        backgroundColor: theme.featureBg,
-                        borderColor: theme.featureBorder,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.featureIcon, { color: theme.red2 }]}>
-                      {String(index + 1).padStart(2, "0")}
-                    </Text>
-                    <Text style={[styles.featureText, { color: theme.text }]}>{feature}</Text>
-                  </View>
-                )
-              )}
+              {["Verified celebration venues", "Curated add-ons and experiences", "Instant booking with secure checkout"].map((feature, index) => (
+                <View
+                  key={feature}
+                  style={[styles.feature, { backgroundColor: theme.featureBg, borderColor: theme.featureBorder }]}
+                >
+                  <Text style={[styles.featureIcon, { color: theme.red2 }]}>{String(index + 1).padStart(2, "0")}</Text>
+                  <Text style={[styles.featureText, { color: theme.text }]}>{feature}</Text>
+                </View>
+              ))}
             </View>
 
             {step === "phone" ? (
+              <View style={[styles.modeRow, { borderColor: theme.fieldBorder }]}>
+                {(["login", "signup"] as AuthMode[]).map((mode) => {
+                  const selected = authMode === mode;
+                  return (
+                    <Pressable
+                      key={mode}
+                      onPress={() => switchMode(mode)}
+                      style={[styles.modeButton, { backgroundColor: selected ? theme.red2 : "transparent" }]}
+                    >
+                      <Text style={[styles.modeText, { color: selected ? "#FFFFFF" : theme.text2 }]}>
+                        {mode === "login" ? "Login" : "Sign up"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            {step === "phone" ? (
               <View style={styles.form}>
+                <Text style={[styles.otpHint, { color: theme.text2 }]}>
+                  {authMode === "login"
+                    ? "Login checks your existing Momentra account after OTP."
+                    : "Sign up verifies your number first, then opens Momentra onboarding."}
+                </Text>
                 <Text style={[styles.label, { color: theme.text2 }]}>Mobile number</Text>
 
                 <View style={styles.phoneRow}>
-                  <View
-                    style={[
-                      styles.countryBox,
-                      {
-                        backgroundColor: theme.field,
-                        borderColor: theme.fieldBorder,
-                      },
-                    ]}
-                  >
+                  <View style={[styles.countryBox, { backgroundColor: theme.field, borderColor: theme.fieldBorder }]}>
                     <Text style={[styles.countryText, { color: theme.text }]}>+91</Text>
                   </View>
 
@@ -275,14 +337,7 @@ export default function LoginScreen() {
                     onChangeText={(text) => setPhone(text.replace(/[^0-9]/g, ""))}
                     placeholder="Enter 10-digit number"
                     placeholderTextColor={theme.muted}
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: theme.field,
-                        borderColor: theme.fieldBorder,
-                        color: theme.text,
-                      },
-                    ]}
+                    style={[styles.input, { backgroundColor: theme.field, borderColor: theme.fieldBorder, color: theme.text }]}
                     textContentType="telephoneNumber"
                     value={phone}
                   />
@@ -297,12 +352,10 @@ export default function LoginScreen() {
                   <Text style={styles.primaryButtonText}>{loading ? "Sending OTP..." : "Continue"}</Text>
                 </Pressable>
               </View>
-            ) : (
+            ) : step === "otp" ? (
               <View style={styles.form}>
                 <Text style={[styles.otpTitle, { color: theme.text }]}>Verify your number</Text>
-                <Text style={[styles.otpHint, { color: theme.text2 }]}>
-                  We sent a 6-digit OTP to +91 {phone.slice(0, 5)}XXXXX
-                </Text>
+                <Text style={[styles.otpHint, { color: theme.text2 }]}>We sent a 6-digit OTP to +91 {phone.slice(0, 5)}XXXXX</Text>
 
                 <TextInput
                   keyboardType="number-pad"
@@ -310,24 +363,17 @@ export default function LoginScreen() {
                   onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, ""))}
                   placeholder="000000"
                   placeholderTextColor={theme.muted}
-                  style={[
-                    styles.otpInput,
-                    {
-                      backgroundColor: theme.field,
-                      borderColor: theme.fieldBorder,
-                      color: theme.text,
-                    },
-                  ]}
+                  style={[styles.otpInput, { backgroundColor: theme.field, borderColor: theme.fieldBorder, color: theme.text }]}
                   value={otp}
                 />
 
                 <Pressable
                   android_ripple={{ color: "rgba(255,255,255,0.14)" }}
                   disabled={loading}
-                  onPress={verifyOTP}
+                  onPress={confirmFirebaseCode}
                   style={[styles.primaryButton, { backgroundColor: theme.red2 }, loading && styles.disabledButton]}
                 >
-                  <Text style={styles.primaryButtonText}>{loading ? "Verifying..." : "Verify and enter"}</Text>
+                  <Text style={styles.primaryButtonText}>{loading ? "Verifying..." : authMode === "signup" ? "Verify and sign up" : "Verify and enter"}</Text>
                 </Pressable>
 
                 <View style={styles.otpActions}>
@@ -338,6 +384,11 @@ export default function LoginScreen() {
                     <Text style={[styles.resend, { color: theme.gold }]}>Change number</Text>
                   </Pressable>
                 </View>
+              </View>
+            ) : (
+              <View style={styles.form}>
+                <Text style={[styles.otpTitle, { color: theme.text }]}>Welcome back</Text>
+                <Text style={[styles.otpHint, { color: theme.text2 }]}>Taking you to your Momentra profile.</Text>
               </View>
             )}
 
@@ -356,171 +407,37 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#F8F2EC",
-  },
-  backgroundGlow: {
-    borderRadius: 180,
-    height: 360,
-    position: "absolute",
-    right: -140,
-    top: -80,
-    width: 360,
-  },
-  flex: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 34,
-  },
-  brandBlock: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
-  logoImage: {
-    height: 128,
-    marginBottom: 10,
-    width: 306,
-  },
-  phonetic: {
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  tagline: {
-    alignSelf: "center",
-    fontSize: 16,
-    lineHeight: 24,
-    maxWidth: 330,
-    textAlign: "center",
-  },
-  panel: {
-    borderRadius: 28,
-    borderWidth: 1,
-    padding: 24,
-    shadowOffset: { height: 18, width: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
-    width: "100%",
-  },
-  features: {
-    gap: 10,
-    marginBottom: 24,
-  },
-  feature: {
-    alignItems: "center",
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    padding: 14,
-  },
-  featureIcon: {
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  featureText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  form: {
-    gap: 14,
-  },
-  label: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
-  },
-  phoneRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  countryBox: {
-    alignItems: "center",
-    borderRadius: 15,
-    borderWidth: 1,
-    height: 52,
-    justifyContent: "center",
-    width: 76,
-  },
-  countryText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  input: {
-    borderRadius: 15,
-    borderWidth: 1,
-    flex: 1,
-    fontSize: 16,
-    height: 52,
-    paddingHorizontal: 16,
-  },
-  primaryButton: {
-    alignItems: "center",
-    borderRadius: 16,
-    height: 54,
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  disabledButton: {
-    opacity: 0.58,
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  otpTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  otpHint: {
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  otpInput: {
-    borderRadius: 15,
-    borderWidth: 1,
-    fontSize: 22,
-    fontWeight: "700",
-    height: 56,
-    letterSpacing: 8,
-    paddingHorizontal: 16,
-    textAlign: "center",
-  },
-  otpActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  resend: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  feedback: {
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 18,
-    marginTop: 14,
-    textAlign: "center",
-  },
-  recaptchaBox: {
-    height: 1,
-    opacity: 0,
-    width: 1,
-  },
-  disclaimer: {
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 18,
-    textAlign: "center",
-  },
+  screen: { flex: 1, backgroundColor: "#F8F2EC" },
+  backgroundGlow: { borderRadius: 180, height: 360, position: "absolute", right: -140, top: -80, width: 360 },
+  flex: { flex: 1 },
+  content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 34 },
+  brandBlock: { alignItems: "center", marginBottom: 30 },
+  logoImage: { height: 128, marginBottom: 10, width: 306 },
+  phonetic: { fontSize: 13, fontWeight: "600", marginBottom: 12, textAlign: "center" },
+  tagline: { alignSelf: "center", fontSize: 16, lineHeight: 24, maxWidth: 330, textAlign: "center" },
+  panel: { borderRadius: 28, borderWidth: 1, padding: 24, shadowOffset: { height: 18, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28, width: "100%" },
+  features: { gap: 10, marginBottom: 24 },
+  feature: { alignItems: "center", borderRadius: 18, borderWidth: 1, flexDirection: "row", gap: 12, padding: 14 },
+  featureIcon: { fontSize: 13, fontWeight: "800", letterSpacing: 1 },
+  featureText: { flex: 1, fontSize: 13, fontWeight: "600" },
+  modeRow: { borderRadius: 16, borderWidth: 1, flexDirection: "row", marginBottom: 18, overflow: "hidden", padding: 4 },
+  modeButton: { alignItems: "center", borderRadius: 12, flex: 1, paddingVertical: 11 },
+  modeText: { fontSize: 13, fontWeight: "800" },
+  form: { gap: 14 },
+  label: { fontSize: 10, fontWeight: "700", letterSpacing: 1.6, textTransform: "uppercase" },
+  phoneRow: { flexDirection: "row", gap: 10 },
+  countryBox: { alignItems: "center", borderRadius: 15, borderWidth: 1, height: 52, justifyContent: "center", width: 76 },
+  countryText: { fontSize: 15, fontWeight: "700" },
+  input: { borderRadius: 15, borderWidth: 1, flex: 1, fontSize: 16, height: 52, paddingHorizontal: 16 },
+  primaryButton: { alignItems: "center", borderRadius: 16, height: 54, justifyContent: "center", marginTop: 4 },
+  disabledButton: { opacity: 0.58 },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+  otpTitle: { fontSize: 22, fontWeight: "700" },
+  otpHint: { fontSize: 13, lineHeight: 20 },
+  otpInput: { borderRadius: 15, borderWidth: 1, fontSize: 22, fontWeight: "700", height: 56, letterSpacing: 8, paddingHorizontal: 16, textAlign: "center" },
+  otpActions: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
+  resend: { fontSize: 13, fontWeight: "700" },
+  feedback: { fontSize: 12, fontWeight: "700", lineHeight: 18, marginTop: 14, textAlign: "center" },
+  recaptchaBox: { height: 1, opacity: 0, width: 1 },
+  disclaimer: { fontSize: 11, lineHeight: 17, marginTop: 18, textAlign: "center" },
 });

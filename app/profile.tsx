@@ -93,39 +93,39 @@ const SETTINGS_SECTIONS: SettingSection[] = [
   {
     label: "Account",
     rows: [
-      { id: "editProfile", icon: "👤", color: "gold", label: "Edit Profile", sub: "Name, email, photo", right: "chevron", screen: "EditProfile" },
-      { id: "addresses", icon: "📍", color: "blue", label: "Saved Addresses", sub: "Home, Work, Other", right: "value", value: "2 saved", screen: "Addresses" },
-      { id: "payment", icon: "💳", color: "green", label: "Payment Methods", sub: "UPI, cards, wallet", right: "badge", badge: "₹1,250 credits", badgeType: "gold", screen: "Payment" },
-      { id: "notifications", icon: "🔔", color: "red", label: "Notifications", sub: "Bookings, offers, alerts", right: "badge", badge: "On", badgeType: "green", dot: true, screen: "Notifications" },
+      { id: "editProfile", icon: "PR", color: "gold", label: "Edit Profile", sub: "Name, email, photo", right: "chevron", screen: "EditProfile" },
+      { id: "addresses", icon: "AD", color: "blue", label: "Saved Addresses", sub: "Home, Work, Other", right: "value", value: "2 saved", screen: "Addresses" },
+      { id: "payment", icon: "PA", color: "green", label: "Payment Methods", sub: "UPI, cards, wallet", right: "badge", badge: "₹1,250 credits", badgeType: "gold", screen: "Payment" },
+      { id: "notifications", icon: "NO", color: "red", label: "Notifications", sub: "Bookings, offers, alerts", right: "badge", badge: "On", badgeType: "green", dot: true, screen: "Notifications" },
     ],
   },
   {
     label: "Preferences",
     rows: [
-      { id: "city", icon: "🏙️", color: "orange", label: "City", sub: "Shows experiences near you", right: "value", value: "Vizag", highlight: true, screen: "CitySelect" },
-      { id: "theme", icon: "🎨", color: "purple", label: "Theme", sub: "", right: "toggle" },
+      { id: "city", icon: "CI", color: "orange", label: "City", sub: "Shows experiences near you", right: "value", value: "Vizag", highlight: true, screen: "CitySelect" },
+      { id: "theme", icon: "TH", color: "purple", label: "Theme", sub: "", right: "toggle" },
     ],
   },
   {
     label: "Activity",
     rows: [
-      { id: "bookings", icon: "🗓️", color: "teal", label: "My Bookings", sub: "Upcoming, past, cancelled", right: "badge", badge: "3 upcoming", badgeType: "gold", screen: "MomentsScreen" },
-      { id: "saved", icon: "❤️", color: "red", label: "Saved Experiences", sub: "Your wishlist", right: "value", value: "5 saved", screen: "MomentsScreen" },
+      { id: "bookings", icon: "BK", color: "teal", label: "My Bookings", sub: "Upcoming, past, cancelled", right: "badge", badge: "3 upcoming", badgeType: "gold", screen: "MomentsScreen" },
+      { id: "saved", icon: "SV", color: "red", label: "Saved Experiences", sub: "Your wishlist", right: "value", value: "5 saved", screen: "MomentsScreen" },
     ],
   },
   {
     label: "Support",
     rows: [
-      { id: "help", icon: "🎧", color: "blue", label: "Help & Support", sub: "Chat, call, ticket", right: "chevron", screen: "Help" },
-      { id: "contact", icon: "💬", color: "green", label: "Contact Us", sub: "Email, WhatsApp", right: "chevron", screen: "Contact" },
+      { id: "help", icon: "HE", color: "blue", label: "Help & Support", sub: "Chat, call, ticket", right: "chevron", screen: "Help" },
+      { id: "contact", icon: "CO", color: "green", label: "Contact Us", sub: "Email, WhatsApp", right: "chevron", screen: "Contact" },
       { id: "faq", icon: "❓", color: "gold", label: "FAQs", sub: "Quick answers", right: "chevron", screen: "FAQs" },
     ],
   },
   {
     label: "Legal",
     rows: [
-      { id: "privacy", icon: "🔒", color: "grey", label: "Privacy Policy", sub: "", right: "chevron", screen: "Privacy" },
-      { id: "terms", icon: "📄", color: "grey", label: "Terms & Conditions", sub: "", right: "chevron", screen: "Terms" },
+      { id: "privacy", icon: "PV", color: "grey", label: "Privacy Policy", sub: "", right: "chevron", screen: "Privacy" },
+      { id: "terms", icon: "TC", color: "grey", label: "Terms & Conditions", sub: "", right: "chevron", screen: "Terms" },
     ],
   },
 ];
@@ -247,7 +247,7 @@ export default function ProfileScreen() {
             </Text>
           </View>
           {row.dot ? <View style={s.notifDot} /> : null}
-          <Text style={[s.chevron, { color: T.text3 }]}>›</Text>
+          <Text style={[s.chevron, { color: T.text3 }]}>&gt;</Text>
         </View>
       );
     }
@@ -258,12 +258,12 @@ export default function ProfileScreen() {
           <Text style={[s.rowVal, { color: row.highlight ? T.gold : T.text3, fontWeight: row.highlight ? "500" : "400" }]}>
             {row.value}
           </Text>
-          <Text style={[s.chevron, { color: T.text3 }]}>›</Text>
+          <Text style={[s.chevron, { color: T.text3 }]}>&gt;</Text>
         </View>
       );
     }
 
-    return <Text style={[s.chevron, { color: T.text3 }]}>›</Text>;
+    return <Text style={[s.chevron, { color: T.text3 }]}>&gt;</Text>;
   }
 
   function SettingRow({ row, isLast }: { row: SettingRowType; isLast: boolean }) {
@@ -325,7 +325,7 @@ export default function ProfileScreen() {
               <Text style={s.avatarInitials}>{initials}</Text>
             </LinearGradient>
             <TouchableOpacity style={[s.avatarEdit, { backgroundColor: T.red, borderColor: T.bg }]}>
-              <Text style={{ fontSize: 10 }}>✏️</Text>
+              <Text style={{ fontSize: 10 }}>ED</Text>
             </TouchableOpacity>
           </View>
 
@@ -334,10 +334,10 @@ export default function ProfileScreen() {
             <Text style={[s.userPhone, { color: T.text2 }]}>{userPhone}</Text>
             <View style={s.userBadgeRow}>
               <View style={s.goldBadge}>
-                <Text style={[s.userBadgeTxt, { color: T.gold }]}>✓ Phone verified</Text>
+                <Text style={[s.userBadgeTxt, { color: T.gold }]}>Phone verified</Text>
               </View>
               <View style={s.redBadge}>
-                <Text style={[s.userBadgeTxt, { color: T.red }]}>Supabase Auth</Text>
+                <Text style={[s.userBadgeTxt, { color: T.red }]}>Firebase Auth</Text>
               </View>
             </View>
           </View>
@@ -347,7 +347,7 @@ export default function ProfileScreen() {
           onPress={() => Alert.alert("Edit Profile", "Opening Edit Profile...")}
           style={[s.editBtn, { backgroundColor: T.surf, borderColor: T.border2 }]}
         >
-          <Text style={{ fontSize: 13 }}>✏️</Text>
+          <Text style={{ fontSize: 13 }}>ED</Text>
           <Text style={[s.editBtnTxt, { color: T.text2 }]}>Edit Profile</Text>
         </TouchableOpacity>
 
@@ -376,12 +376,11 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           style={[s.logoutBtn, { backgroundColor: "rgba(192,57,43,0.09)", borderColor: "rgba(192,57,43,0.38)" }]}
         >
-          <Text style={{ fontSize: 18 }}>🚪</Text>
           <Text style={[s.logoutTxt, { color: T.red }]}>Log Out</Text>
         </TouchableOpacity>
 
         <Text style={[s.versionTxt, { color: T.text3 }]}>
-          Momentra v1.0.0 · Made with ❤️ in Vizag
+          Momentra v1.0.0 · Made in Vizag
         </Text>
       </ScrollView>
 
