@@ -86,7 +86,7 @@ export const supabase = createClient(
 
 export async function testSupabaseConnection() {
   try {
-    const { error } = await supabase.auth.getSession();
+    const { error } = await supabase.from("users").select("*").limit(1);
 
     if (error) {
       return { error: error.message, ok: false };

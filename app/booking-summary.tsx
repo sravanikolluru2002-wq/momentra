@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
@@ -18,6 +17,7 @@ import { startPayment } from "@/lib/razorpay";
 import { supabase } from "@/lib/supabase";
 import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 import { whatsappCategoryFromOccasion } from "@/lib/whatsapp";
+import { firebaseAuth } from "@/firebase/config";
 
 const KITTY_PARTY_IMAGE = require("../assets/kitty-party.png");
 
@@ -103,7 +103,7 @@ export default function BookingSummaryScreen() {
     if (saving) return;
 
     setSaving(true);
-    const userPhone = (await AsyncStorage.getItem("@momentra_phone")) ?? "unknown";
+    const userPhone = firebaseAuth.currentUser?.phoneNumber ?? "unknown";
     const addons = [
       ...selectedAddOns.map((addOn) => addOn.name),
       ...(request ? [`Request: ${request}`] : []),

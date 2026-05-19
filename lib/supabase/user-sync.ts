@@ -1,4 +1,5 @@
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { User as FirebaseUser } from "firebase/auth";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type SyncResult = {
   error?: string;
@@ -39,45 +40,44 @@ async function tryUpdateThenInsert(
   return { ok: true };
 }
 
-export async function syncCustomerUser(
+export async function syncFirebaseCustomerUser(
   supabase: SupabaseClient,
-  user: User,
-  contact: { email?: string; phone?: string }
+  user: FirebaseUser
 ): Promise<SyncResult> {
   const now = new Date().toISOString();
-  const email = contact.email ?? user.email ?? "";
-  const phone = contact.phone ?? user.phone ?? "";
+  const phone = user.phoneNumber ?? "";
   const payloads: Array<Record<string, string>> = [
     {
-      auth_user_id: user.id,
-      email,
-      id: user.id,
+      firebase_uid: user.uid,
+      last_login: now,
       last_login_at: now,
       phone,
+      phone_number: phone,
       updated_at: now,
       user_phone: phone,
     },
     {
-      auth_user_id: user.id,
-      email,
-      id: user.id,
+      firebase_uid: user.uid,
+      last_login: now,
+      phone_number: phone,
       updated_at: now,
     },
     {
-      email,
-      id: user.id,
+      firebase_uid: user.uid,
+      phone_number: phone,
       updated_at: now,
     },
     {
-      email,
+      firebase_uid: user.uid,
+      phone: phone,
       updated_at: now,
     },
     {
-      id: user.id,
+      phone_number: phone,
       updated_at: now,
     },
     {
-      phone,
+      phone: phone,
       updated_at: now,
     },
     {
@@ -85,7 +85,7 @@ export async function syncCustomerUser(
     },
   ];
 
-  const matchColumns = ["id", "auth_user_id", "email", "phone", "user_phone"];
+  const matchColumns = ["firebase_uid", "phone_number", "phone", "user_phone"];
   let lastError = "";
 
   for (const payload of payloads) {
@@ -113,7 +113,7 @@ export async function syncCustomerUser(
   }
 
   return {
-    error: lastError || "Could not sync user profile. Check the users table columns.",
+    error: lastError || "Could not sync Firebase user profile. Check the users table columns.",
     ok: false,
   };
 }

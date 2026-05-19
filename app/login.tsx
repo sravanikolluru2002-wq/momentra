@@ -1,6 +1,12 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import {
+  ConfirmationResult,
+  RecaptchaVerifier,
+  onAuthStateChanged,
+  signInWithPhoneNumber,
+} from "firebase/auth";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -16,8 +22,9 @@ import {
 } from "react-native";
 
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
 import { supabase } from "@/lib/supabase";
-import { syncCustomerUser } from "@/lib/supabase/user-sync";
+import { syncFirebaseCustomerUser } from "@/lib/supabase/user-sync";
 
 const DARK = {
   bg: "#0D0905",
@@ -67,6 +74,8 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
+  const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
   const theme = isDark ? DARK : LIGHT;
 
   const normalizedPhone = phone.replace(/\D/g, "");
@@ -75,36 +84,19 @@ export default function LoginScreen() {
   const otpValid = /^\d{6}$/.test(otp);
 
   useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(({ data, error: sessionError }) => {
-      console.log("[Momentra auth] login session state", {
-        error: sessionError?.message ?? null,
-        hasSession: Boolean(data.session),
-        phone: data.session?.user.phone ?? null,
-        userId: data.session?.user.id ?? null,
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      console.log("[Momentra auth] Firebase login auth state", {
+        hasUser: Boolean(user),
+        phone: user?.phoneNumber ?? null,
+        uid: user?.uid ?? null,
       });
 
-      if (mounted && data.session?.user) {
+      if (user) {
         router.replace("/profile");
       }
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[Momentra auth] login auth state change", {
-        event,
-        hasSession: Boolean(session),
-        phone: session?.user.phone ?? null,
-        userId: session?.user.id ?? null,
-      });
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return unsubscribe;
   }, []);
 
   function showError(text: string) {
@@ -124,22 +116,35 @@ export default function LoginScreen() {
       return;
     }
 
+    if (!hasFirebaseEnv) {
+      showError("Firebase is not configured. Add the EXPO_PUBLIC_FIREBASE_* env vars in Vercel and locally.");
+      return;
+    }
+
+    if (Platform.OS !== "web") {
+      showError("Firebase phone OTP is currently enabled for the Momentra web/PWA experience.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithOtp({
-        phone: fullPhone,
-      });
-
-      if (signInError) {
-        console.error("[Momentra auth] OTP send failed", signInError);
-        throw signInError;
+      if (!recaptchaVerifier.current) {
+        recaptchaVerifier.current = new RecaptchaVerifier(firebaseAuth, "firebase-recaptcha-container", {
+          size: "invisible",
+        });
       }
 
-      console.log("[Momentra auth] OTP sent successfully", { phone: fullPhone });
+      const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, recaptchaVerifier.current);
+
+      console.log("[Momentra auth] Firebase OTP sent successfully", { phone: fullPhone });
+      setConfirmation(result);
       setStep("otp");
       setMessage(`OTP sent to ${fullPhone}`);
     } catch (err) {
+      console.error("[Momentra auth] Firebase OTP send failed", err);
+      recaptchaVerifier.current?.clear();
+      recaptchaVerifier.current = null;
       showError(err instanceof Error ? err.message : "Could not send OTP.");
     } finally {
       setLoading(false);
@@ -155,35 +160,31 @@ export default function LoginScreen() {
       return;
     }
 
+    if (!confirmation) {
+      showError("Please request a fresh OTP first.");
+      setStep("phone");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
-        phone: fullPhone,
-        token: otp,
-        type: "sms",
+      const credential = await confirmation.confirm(otp);
+      const user = credential.user;
+
+      console.log("[Momentra auth] Firebase OTP verified successfully", {
+        phone: user.phoneNumber ?? fullPhone,
+        uid: user.uid,
       });
 
-      if (verifyError) {
-        console.error("[Momentra auth] OTP verify failed", verifyError);
-        throw verifyError;
-      }
-
-      console.log("[Momentra auth] OTP verified successfully", {
-        hasSession: Boolean(data.session),
-        phone: data.user?.phone ?? fullPhone,
-        userId: data.user?.id ?? null,
-      });
-
-      if (data.user) {
-        const sync = await syncCustomerUser(supabase, data.user, { phone: fullPhone });
-        if (!sync.ok) {
-          console.warn("[Momentra auth] user sync warning", sync.error);
-        }
+      const sync = await syncFirebaseCustomerUser(supabase, user);
+      if (!sync.ok) {
+        console.warn("[Momentra auth] Supabase Firebase user sync warning", sync.error);
       }
 
       router.replace("/profile");
     } catch (err) {
+      console.error("[Momentra auth] Firebase OTP verify failed", err);
       showError(err instanceof Error ? err.message : "Could not verify OTP.");
     } finally {
       setLoading(false);
@@ -230,7 +231,7 @@ export default function LoginScreen() {
             ]}
           >
             <View style={styles.features}>
-              {["Verified celebration venues", "Curated add-ons and experiences", "Real OTP secure login"].map(
+              {["Verified celebration venues", "Curated add-ons and experiences", "Instant booking with secure checkout"].map(
                 (feature, index) => (
                   <View
                     key={feature}
@@ -293,7 +294,7 @@ export default function LoginScreen() {
                   onPress={sendOTP}
                   style={[styles.primaryButton, { backgroundColor: theme.red2 }, loading && styles.disabledButton]}
                 >
-                  <Text style={styles.primaryButtonText}>{loading ? "Sending OTP..." : "Send OTP"}</Text>
+                  <Text style={styles.primaryButtonText}>{loading ? "Sending OTP..." : "Continue"}</Text>
                 </Pressable>
               </View>
             ) : (
@@ -342,6 +343,7 @@ export default function LoginScreen() {
 
             {error ? <Text style={[styles.feedback, { color: theme.red }]}>{error}</Text> : null}
             {message ? <Text style={[styles.feedback, { color: theme.green }]}>{message}</Text> : null}
+            <View nativeID="firebase-recaptcha-container" style={styles.recaptchaBox} />
 
             <Text style={[styles.disclaimer, { color: theme.muted }]}>
               By continuing you agree to the Momentra Terms and Privacy Policy.
@@ -509,6 +511,11 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 14,
     textAlign: "center",
+  },
+  recaptchaBox: {
+    height: 1,
+    opacity: 0,
+    width: 1,
   },
   disclaimer: {
     fontSize: 11,

@@ -1,5 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
@@ -12,11 +13,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import type { User } from "@supabase/supabase-js";
 
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
-import { supabase } from "@/lib/supabase";
+import { firebaseAuth } from "@/firebase/config";
 
 const DARK = {
   bg: "#0D0905",
@@ -143,54 +143,25 @@ export default function ProfileScreen() {
   }, [user?.phone]);
 
   useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(({ data, error }) => {
-      console.log("[Momentra auth] profile session state", {
-        error: error?.message ?? null,
-        hasSession: Boolean(data.session),
-        phone: data.session?.user.phone ?? null,
-        userId: data.session?.user.id ?? null,
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (firebaseUser) => {
+      console.log("[Momentra auth] Firebase profile auth state", {
+        hasUser: Boolean(firebaseUser),
+        phone: firebaseUser?.phoneNumber ?? null,
+        uid: firebaseUser?.uid ?? null,
       });
 
-      if (!mounted) return;
-
-      if (!data.session?.user) {
+      if (!firebaseUser) {
+        setUser(null);
         setLoadingSession(false);
         router.replace("/login" as never);
         return;
       }
 
-      setUser(data.session.user);
+      setUser(firebaseUser);
       setLoadingSession(false);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[Momentra auth] profile auth state change", {
-        event,
-        hasSession: Boolean(session),
-        phone: session?.user.phone ?? null,
-        userId: session?.user.id ?? null,
-      });
-
-      if (!mounted) return;
-
-      if (!session?.user) {
-        setUser(null);
-        router.replace("/login" as never);
-        return;
-      }
-
-      setUser(session.user);
-      setLoadingSession(false);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return unsubscribe;
   }, [router]);
 
   function toggleTheme() {
@@ -206,16 +177,30 @@ export default function ProfileScreen() {
     Alert.alert(row.label, `Opening ${row.label}...`);
   }
 
+  async function performLogout() {
+    await signOut(firebaseAuth);
+    router.replace("/login" as never);
+  }
+
   function handleLogout() {
+    if (Platform.OS === "web") {
+      const confirmed =
+        typeof window === "undefined" ||
+        window.confirm("Are you sure you want to log out of Momentra?");
+
+      if (confirmed) {
+        performLogout();
+      }
+
+      return;
+    }
+
     Alert.alert("Log Out", "Are you sure you want to log out of Momentra?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Log Out",
         style: "destructive",
-        onPress: async () => {
-          await supabase.auth.signOut();
-          router.replace("/login" as never);
-        },
+        onPress: performLogout,
       },
     ]);
   }

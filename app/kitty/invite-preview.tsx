@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
@@ -9,6 +8,7 @@ import { findKittyPackage, findKittyVenue, kittyTotal } from "@/constants/kitty"
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { supabase } from "@/lib/supabase";
 import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
+import { firebaseAuth } from "@/firebase/config";
 
 export default function KittyInvitePreviewScreen() {
   const router = useRouter();
@@ -62,7 +62,7 @@ export default function KittyInvitePreviewScreen() {
 
     setCreatingBooking(true);
 
-    const userPhone = (await AsyncStorage.getItem("@momentra_phone")) ?? "unknown";
+    const userPhone = firebaseAuth.currentUser?.phoneNumber ?? "unknown";
     const basePayload: Record<string, unknown> = {
       addons: `Kitty split payment; Package: ${selectedPackage.name}; Per head: ₹${selectedPackage.perHead.toLocaleString("en-IN")}; Minimum guests: ${minimum}`,
       booking_date: params.bookingDate ?? "",
