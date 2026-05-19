@@ -66,6 +66,7 @@ type AuthMode = "login" | "signup";
 type LoginStep = "phone" | "otp" | "welcome";
 
 const USER_SELECT = "id,firebase_uid,phone_number";
+const RECAPTCHA_CONTAINER_ID = "firebase-recaptcha-container";
 
 function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
@@ -105,6 +106,7 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
   const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
+  const recaptchaRenderPromise = useRef<Promise<number> | null>(null);
   const theme = isDark ? DARK : LIGHT;
 
   const normalizedPhone = phone.replace(/\D/g, "");
@@ -177,6 +179,51 @@ export default function LoginScreen() {
     return unsubscribe;
   }, [authMode, loginExistingUser]);
 
+  useEffect(() => {
+    return () => {
+      recaptchaVerifier.current?.clear();
+      recaptchaVerifier.current = null;
+      recaptchaRenderPromise.current = null;
+    };
+  }, []);
+
+  const getRecaptchaVerifier = useCallback(async () => {
+    if (recaptchaVerifier.current) {
+      if (!recaptchaRenderPromise.current) {
+        recaptchaRenderPromise.current = recaptchaVerifier.current.render();
+      }
+      await recaptchaRenderPromise.current;
+      return recaptchaVerifier.current;
+    }
+
+    const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
+
+    if (container) {
+      container.innerHTML = "";
+    }
+
+    const verifier = new RecaptchaVerifier(firebaseAuth, RECAPTCHA_CONTAINER_ID, {
+      size: "invisible",
+    });
+
+    recaptchaVerifier.current = verifier;
+    recaptchaRenderPromise.current = verifier.render();
+    await recaptchaRenderPromise.current;
+
+    return verifier;
+  }, []);
+
+  const resetRecaptchaVerifier = useCallback(() => {
+    recaptchaVerifier.current?.clear();
+    recaptchaVerifier.current = null;
+    recaptchaRenderPromise.current = null;
+
+    const container = typeof document !== "undefined" ? document.getElementById(RECAPTCHA_CONTAINER_ID) : null;
+    if (container) {
+      container.innerHTML = "";
+    }
+  }, []);
+
   function switchMode(nextMode: AuthMode) {
     setAuthMode(nextMode);
     setStep("phone");
@@ -208,20 +255,14 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      if (!recaptchaVerifier.current) {
-        recaptchaVerifier.current = new RecaptchaVerifier(firebaseAuth, "firebase-recaptcha-container", {
-          size: "invisible",
-        });
-      }
-
-      const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, recaptchaVerifier.current);
+      const verifier = await getRecaptchaVerifier();
+      const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, verifier);
       setConfirmation(result);
       setStep("otp");
       setMessage(`OTP sent to ${fullPhone}`);
     } catch (err) {
       console.error("[Momentra auth] Firebase OTP send failed", err);
-      recaptchaVerifier.current?.clear();
-      recaptchaVerifier.current = null;
+      resetRecaptchaVerifier();
       showError(err instanceof Error ? err.message : "Could not send OTP.");
     } finally {
       setLoading(false);
@@ -394,7 +435,7 @@ export default function LoginScreen() {
 
             {error ? <Text style={[styles.feedback, { color: theme.red }]}>{error}</Text> : null}
             {message ? <Text style={[styles.feedback, { color: theme.green }]}>{message}</Text> : null}
-            <View nativeID="firebase-recaptcha-container" style={styles.recaptchaBox} />
+            <View nativeID={RECAPTCHA_CONTAINER_ID} style={styles.recaptchaBox} />
 
             <Text style={[styles.disclaimer, { color: theme.muted }]}>
               By continuing you agree to the Momentra Terms and Privacy Policy.
