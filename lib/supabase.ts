@@ -16,6 +16,14 @@ const supabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   expoExtra.supabaseAnonKey;
 
+export const hasSupabaseEnv = Boolean(supabaseUrl && supabaseAnonKey);
+
+if (!hasSupabaseEnv) {
+  console.warn(
+    "[Momentra data] Missing Supabase env vars. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY."
+  );
+}
+
 type AsyncStorageLike = {
   getItem: (key: string) => Promise<string | null>;
   removeItem: (key: string) => Promise<void>;
@@ -57,19 +65,9 @@ async function removeStoredItem(key: string) {
   }
 }
 
-function requireEnv(name: string, value: string | undefined) {
-  if (!value) {
-    throw new Error(
-      `Missing ${name}. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to your Expo/Vercel environment before using Supabase.`
-    );
-  }
-
-  return value;
-}
-
 export const supabase = createClient(
-  requireEnv("EXPO_PUBLIC_SUPABASE_URL", supabaseUrl),
-  requireEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY", supabaseAnonKey),
+  supabaseUrl ?? "https://missing-supabase-url.supabase.co",
+  supabaseAnonKey ?? "missing-supabase-anon-key",
   {
     auth: {
       autoRefreshToken: true,
