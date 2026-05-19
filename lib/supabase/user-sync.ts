@@ -1,5 +1,3 @@
-"use client";
-
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 type SyncResult = {

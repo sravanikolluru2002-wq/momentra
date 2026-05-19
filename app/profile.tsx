@@ -1,5 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Platform,
@@ -11,9 +12,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import type { User } from "@supabase/supabase-js";
 
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
+import { supabase } from "@/lib/supabase";
 
 const DARK = {
   bg: "#0D0905",
@@ -130,7 +133,65 @@ const SETTINGS_SECTIONS: SettingSection[] = [
 export default function ProfileScreen() {
   const router = useRouter();
   const { isDark, setIsDark } = useMomentraTheme();
+  const [user, setUser] = useState<User | null>(null);
+  const [loadingSession, setLoadingSession] = useState(true);
   const T = isDark ? DARK : LIGHT;
+  const userPhone = user?.phone ?? "Not available";
+  const initials = useMemo(() => {
+    const digits = user?.phone?.replace(/\D/g, "") ?? "";
+    return digits ? digits.slice(-2) : "M";
+  }, [user?.phone]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      console.log("[Momentra auth] profile session state", {
+        error: error?.message ?? null,
+        hasSession: Boolean(data.session),
+        phone: data.session?.user.phone ?? null,
+        userId: data.session?.user.id ?? null,
+      });
+
+      if (!mounted) return;
+
+      if (!data.session?.user) {
+        setLoadingSession(false);
+        router.replace("/login" as never);
+        return;
+      }
+
+      setUser(data.session.user);
+      setLoadingSession(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[Momentra auth] profile auth state change", {
+        event,
+        hasSession: Boolean(session),
+        phone: session?.user.phone ?? null,
+        userId: session?.user.id ?? null,
+      });
+
+      if (!mounted) return;
+
+      if (!session?.user) {
+        setUser(null);
+        router.replace("/login" as never);
+        return;
+      }
+
+      setUser(session.user);
+      setLoadingSession(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   function toggleTheme() {
     setIsDark((previous) => !previous);
@@ -151,7 +212,10 @@ export default function ProfileScreen() {
       {
         text: "Log Out",
         style: "destructive",
-        onPress: () => router.replace("/login" as never),
+        onPress: async () => {
+          await supabase.auth.signOut();
+          router.replace("/login" as never);
+        },
       },
     ]);
   }
@@ -251,6 +315,17 @@ export default function ProfileScreen() {
     <View style={[s.root, { backgroundColor: T.bg }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
+      {loadingSession ? (
+        <View style={s.loadingWrap}>
+          <Text style={[s.loadingText, { color: T.text2 }]}>Checking your Momentra session...</Text>
+        </View>
+      ) : !user ? (
+        <View style={s.loadingWrap}>
+          <Text style={[s.loadingText, { color: T.text2 }]}>Redirecting to login...</Text>
+        </View>
+      ) : (
+        <>
+
       <View style={[s.hero, { borderBottomColor: T.border }]}>
         <LinearGradient
           colors={["rgba(192,57,43,0.06)", "transparent"]}
@@ -259,10 +334,10 @@ export default function ProfileScreen() {
           style={StyleSheet.absoluteFill}
         />
 
-        <View style={s.profileRow}>
+          <View style={s.profileRow}>
           <View style={s.avatarWrap}>
             <LinearGradient colors={["rgba(192,57,43,0.3)", "rgba(201,151,90,0.2)"]} style={s.avatar}>
-              <Text style={s.avatarInitials}>RS</Text>
+              <Text style={s.avatarInitials}>{initials}</Text>
             </LinearGradient>
             <TouchableOpacity style={[s.avatarEdit, { backgroundColor: T.red, borderColor: T.bg }]}>
               <Text style={{ fontSize: 10 }}>✏️</Text>
@@ -270,14 +345,14 @@ export default function ProfileScreen() {
           </View>
 
           <View style={s.userInfo}>
-            <Text style={[s.userName, { color: T.text }]}>Rahul Sharma</Text>
-            <Text style={[s.userPhone, { color: T.text2 }]}>+91 98765 43210</Text>
+            <Text style={[s.userName, { color: T.text }]}>Momentra Customer</Text>
+            <Text style={[s.userPhone, { color: T.text2 }]}>{userPhone}</Text>
             <View style={s.userBadgeRow}>
               <View style={s.goldBadge}>
-                <Text style={[s.userBadgeTxt, { color: T.gold }]}>⭐ Gold Member</Text>
+                <Text style={[s.userBadgeTxt, { color: T.gold }]}>✓ Phone verified</Text>
               </View>
               <View style={s.redBadge}>
-                <Text style={[s.userBadgeTxt, { color: T.red }]}>📍 Vizag</Text>
+                <Text style={[s.userBadgeTxt, { color: T.red }]}>Supabase Auth</Text>
               </View>
             </View>
           </View>
@@ -293,10 +368,10 @@ export default function ProfileScreen() {
 
         <View style={s.statsRow}>
           {[
-            { num: "8", lbl: "Bookings" },
-            { num: "5", lbl: "Saved" },
-            { num: "₹1.5K", lbl: "Earned" },
-            { num: "4.8★", lbl: "Rating" },
+            { num: "0", lbl: "Bookings" },
+            { num: "0", lbl: "Saved" },
+            { num: "New", lbl: "Status" },
+            { num: "Live", lbl: "Session" },
           ].map((stat) => (
             <View key={stat.lbl} style={[s.statBox, { backgroundColor: T.surf, borderColor: T.border }]}>
               <Text style={[s.statNum, { color: T.gold }]}>{stat.num}</Text>
@@ -326,12 +401,16 @@ export default function ProfileScreen() {
       </ScrollView>
 
       <LuxuryBottomNav active="Profile" />
+        </>
+      )}
     </View>
   );
 }
 
 const s = StyleSheet.create({
   root: { flex: 1, paddingTop: Platform.OS === "ios" ? 52 : 32 },
+  loadingWrap: { alignItems: "center", flex: 1, justifyContent: "center", padding: 24 },
+  loadingText: { fontSize: 14, fontWeight: "600", textAlign: "center" },
   hero: { borderBottomWidth: 1, overflow: "hidden", paddingBottom: 18, paddingHorizontal: 20, paddingTop: 16 },
   profileRow: { alignItems: "center", flexDirection: "row", gap: 16, marginBottom: 14 },
   avatarWrap: { flexShrink: 0, position: "relative" },

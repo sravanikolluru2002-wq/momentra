@@ -1,8 +1,20 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
+import Constants from "expo-constants";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const expoExtra = (Constants.expoConfig?.extra ?? {}) as {
+  supabaseAnonKey?: string;
+  supabaseUrl?: string;
+};
+
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ??
+  process.env.NEXT_PUBLIC_SUPABASE_URL ??
+  expoExtra.supabaseUrl;
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ??
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+  expoExtra.supabaseAnonKey;
 
 type AsyncStorageLike = {
   getItem: (key: string) => Promise<string | null>;
@@ -48,7 +60,7 @@ async function removeStoredItem(key: string) {
 function requireEnv(name: string, value: string | undefined) {
   if (!value) {
     throw new Error(
-      `Missing ${name}. Add it to your Expo environment before using Supabase.`
+      `Missing ${name}. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to your Expo/Vercel environment before using Supabase.`
     );
   }
 

@@ -1,7 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import { router } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -17,6 +16,8 @@ import {
 } from "react-native";
 
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+import { supabase } from "@/lib/supabase";
+import { syncCustomerUser } from "@/lib/supabase/user-sync";
 
 const DARK = {
   bg: "#0D0905",
@@ -33,6 +34,7 @@ const DARK = {
   red: "#C0392B",
   red2: "#8E332A",
   gold: "#C9975A",
+  green: "#27AE60",
   shadow: "#000000",
 };
 
@@ -51,50 +53,147 @@ const LIGHT = {
   red: "#7B2E26",
   red2: "#8E332A",
   gold: "#947C6C",
+  green: "#1D7A4A",
   shadow: "#4B241C",
 };
 
+type LoginStep = "phone" | "otp";
+
 export default function LoginScreen() {
-  const router = useRouter();
   const { isDark } = useMomentraTheme();
   const [phone, setPhone] = useState("");
-  const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<LoginStep>("phone");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const theme = isDark ? DARK : LIGHT;
 
-  function sendOTP() {
-    if (phone.length !== 10) {
-      Alert.alert("Enter a valid 10-digit mobile number");
+  const normalizedPhone = phone.replace(/\D/g, "");
+  const fullPhone = useMemo(() => `+91${normalizedPhone}`, [normalizedPhone]);
+  const phoneValid = /^\d{10}$/.test(normalizedPhone);
+  const otpValid = /^\d{6}$/.test(otp);
+
+  useEffect(() => {
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      console.log("[Momentra auth] login session state", {
+        error: sessionError?.message ?? null,
+        hasSession: Boolean(data.session),
+        phone: data.session?.user.phone ?? null,
+        userId: data.session?.user.id ?? null,
+      });
+
+      if (mounted && data.session?.user) {
+        router.replace("/profile");
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[Momentra auth] login auth state change", {
+        event,
+        hasSession: Boolean(session),
+        phone: session?.user.phone ?? null,
+        userId: session?.user.id ?? null,
+      });
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  function showError(text: string) {
+    setError(text);
+    setMessage("");
+    if (Platform.OS !== "web") {
+      Alert.alert("Momentra login", text);
+    }
+  }
+
+  async function sendOTP() {
+    setError("");
+    setMessage("");
+
+    if (!phoneValid) {
+      showError("Enter a valid 10-digit Indian mobile number.");
       return;
     }
 
-    setShowOtp(true);
+    setLoading(true);
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithOtp({
+        phone: fullPhone,
+      });
+
+      if (signInError) {
+        console.error("[Momentra auth] OTP send failed", signInError);
+        throw signInError;
+      }
+
+      console.log("[Momentra auth] OTP sent successfully", { phone: fullPhone });
+      setStep("otp");
+      setMessage(`OTP sent to ${fullPhone}`);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Could not send OTP.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function verifyOTP() {
-    if (otp.length !== 6) {
-      Alert.alert("Enter the 6-digit OTP");
+    setError("");
+    setMessage("");
+
+    if (!otpValid) {
+      showError("Enter the 6-digit OTP.");
       return;
     }
 
-    if (otp !== "123456") {
-      Alert.alert("Invalid OTP. Use 123456 for testing.");
-      return;
-    }
+    setLoading(true);
 
-    const onboardingProfile = await AsyncStorage.getItem("@momentra_profile");
-    await AsyncStorage.setItem("@momentra_phone", `+91${phone}`);
-    router.replace(onboardingProfile ? "/home" : "/onboarding");
+    try {
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        phone: fullPhone,
+        token: otp,
+        type: "sms",
+      });
+
+      if (verifyError) {
+        console.error("[Momentra auth] OTP verify failed", verifyError);
+        throw verifyError;
+      }
+
+      console.log("[Momentra auth] OTP verified successfully", {
+        hasSession: Boolean(data.session),
+        phone: data.user?.phone ?? fullPhone,
+        userId: data.user?.id ?? null,
+      });
+
+      if (data.user) {
+        const sync = await syncCustomerUser(supabase, data.user, { phone: fullPhone });
+        if (!sync.ok) {
+          console.warn("[Momentra auth] user sync warning", sync.error);
+        }
+      }
+
+      router.replace("/profile");
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "Could not verify OTP.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.bg }]}>
       <LinearGradient
-        colors={
-          isDark
-            ? ["#3A0906", "#160907", "#050302"]
-            : ["#FFF8F2", "#F7E7DA", "#FFFDFB"]
-        }
+        colors={isDark ? ["#3A0906", "#160907", "#050302"] : ["#FFF8F2", "#F7E7DA", "#FFFDFB"]}
         style={StyleSheet.absoluteFill}
       />
       <View
@@ -102,33 +201,21 @@ export default function LoginScreen() {
         style={[
           styles.backgroundGlow,
           {
-            backgroundColor: isDark
-              ? "rgba(192,57,43,0.18)"
-              : "rgba(192,57,43,0.08)",
+            backgroundColor: isDark ? "rgba(192,57,43,0.18)" : "rgba(192,57,43,0.08)",
           },
         ]}
       />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.flex}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.brandBlock}>
-            <Image
-              resizeMode="contain"
-              source={require("../assets/logo.png")}
-              style={styles.logoImage}
-            />
-            <Text style={[styles.phonetic, { color: theme.gold }]}>
-              {"/'moh-men-truh/"}
-            </Text>
+            <Image resizeMode="contain" source={require("../assets/logo.png")} style={styles.logoImage} />
+            <Text style={[styles.phonetic, { color: theme.gold }]}>{"/'moh-men-truh/"}</Text>
             <Text style={[styles.tagline, { color: theme.text }]}>
-              Curated celebration venues, experiences, and details in a single
-              beautiful booking flow.
+              Curated celebration venues, experiences, and details in a single beautiful booking flow.
             </Text>
           </View>
 
@@ -143,55 +230,30 @@ export default function LoginScreen() {
             ]}
           >
             <View style={styles.features}>
-              <View
-                style={[
-                  styles.feature,
-                  {
-                    backgroundColor: theme.featureBg,
-                    borderColor: theme.featureBorder,
-                  },
-                ]}
-              >
-                <Text style={[styles.featureIcon, { color: theme.red2 }]}>01</Text>
-                <Text style={[styles.featureText, { color: theme.text }]}>
-                  Verified celebration venues
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.feature,
-                  {
-                    backgroundColor: theme.featureBg,
-                    borderColor: theme.featureBorder,
-                  },
-                ]}
-              >
-                <Text style={[styles.featureIcon, { color: theme.red2 }]}>02</Text>
-                <Text style={[styles.featureText, { color: theme.text }]}>
-                  Curated add-ons and experiences
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.feature,
-                  {
-                    backgroundColor: theme.featureBg,
-                    borderColor: theme.featureBorder,
-                  },
-                ]}
-              >
-                <Text style={[styles.featureIcon, { color: theme.red2 }]}>03</Text>
-                <Text style={[styles.featureText, { color: theme.text }]}>
-                  Instant booking with secure checkout
-                </Text>
-              </View>
+              {["Verified celebration venues", "Curated add-ons and experiences", "Real OTP secure login"].map(
+                (feature, index) => (
+                  <View
+                    key={feature}
+                    style={[
+                      styles.feature,
+                      {
+                        backgroundColor: theme.featureBg,
+                        borderColor: theme.featureBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.featureIcon, { color: theme.red2 }]}>
+                      {String(index + 1).padStart(2, "0")}
+                    </Text>
+                    <Text style={[styles.featureText, { color: theme.text }]}>{feature}</Text>
+                  </View>
+                )
+              )}
             </View>
 
-            {!showOtp ? (
+            {step === "phone" ? (
               <View style={styles.form}>
-                <Text style={[styles.label, { color: theme.text2 }]}>
-                  Mobile number
-                </Text>
+                <Text style={[styles.label, { color: theme.text2 }]}>Mobile number</Text>
 
                 <View style={styles.phoneRow}>
                   <View
@@ -207,6 +269,11 @@ export default function LoginScreen() {
                   </View>
 
                   <TextInput
+                    keyboardType="number-pad"
+                    maxLength={10}
+                    onChangeText={(text) => setPhone(text.replace(/[^0-9]/g, ""))}
+                    placeholder="Enter 10-digit number"
+                    placeholderTextColor={theme.muted}
                     style={[
                       styles.input,
                       {
@@ -215,58 +282,33 @@ export default function LoginScreen() {
                         color: theme.text,
                       },
                     ]}
-                    placeholder="Enter 10-digit number"
-                    placeholderTextColor={theme.muted}
-                    keyboardType="number-pad"
-                    maxLength={10}
+                    textContentType="telephoneNumber"
                     value={phone}
-                    onChangeText={(text) =>
-                      setPhone(text.replace(/[^0-9]/g, ""))
-                    }
                   />
                 </View>
 
                 <Pressable
-                  style={[styles.primaryButton, { backgroundColor: theme.red2 }]}
-                  onPress={sendOTP}
                   android_ripple={{ color: "rgba(255,255,255,0.14)" }}
-                  unstable_pressDelay={0}
+                  disabled={loading}
+                  onPress={sendOTP}
+                  style={[styles.primaryButton, { backgroundColor: theme.red2 }, loading && styles.disabledButton]}
                 >
-                  <Text style={styles.primaryButtonText}>Continue</Text>
-                </Pressable>
-
-                <View style={styles.dividerRow}>
-                  <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-                  <Text style={[styles.or, { color: theme.muted }]}>or</Text>
-                  <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-                </View>
-
-                <Pressable
-                  style={[
-                    styles.googleButton,
-                    {
-                      backgroundColor: theme.field,
-                      borderColor: theme.fieldBorder,
-                    },
-                  ]}
-                  onPress={() => Alert.alert("Google sign-in coming soon")}
-                  android_ripple={{ color: "rgba(201,151,90,0.12)" }}
-                >
-                  <Text style={[styles.googleText, { color: theme.text }]}>
-                    Continue with Google
-                  </Text>
+                  <Text style={styles.primaryButtonText}>{loading ? "Sending OTP..." : "Send OTP"}</Text>
                 </Pressable>
               </View>
             ) : (
               <View style={styles.form}>
-                <Text style={[styles.otpTitle, { color: theme.text }]}>
-                  Verify your number
-                </Text>
+                <Text style={[styles.otpTitle, { color: theme.text }]}>Verify your number</Text>
                 <Text style={[styles.otpHint, { color: theme.text2 }]}>
                   We sent a 6-digit OTP to +91 {phone.slice(0, 5)}XXXXX
                 </Text>
 
                 <TextInput
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, ""))}
+                  placeholder="000000"
+                  placeholderTextColor={theme.muted}
                   style={[
                     styles.otpInput,
                     {
@@ -275,30 +317,31 @@ export default function LoginScreen() {
                       color: theme.text,
                     },
                   ]}
-                  placeholder="000000"
-                  placeholderTextColor={theme.muted}
-                  keyboardType="number-pad"
-                  maxLength={6}
                   value={otp}
-                  onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, ""))}
                 />
-                <Text style={[styles.devNote, { color: theme.gold }]}>
-                  Use 123456 for testing
-                </Text>
 
                 <Pressable
-                  style={[styles.primaryButton, { backgroundColor: theme.red2 }]}
-                  onPress={verifyOTP}
                   android_ripple={{ color: "rgba(255,255,255,0.14)" }}
+                  disabled={loading}
+                  onPress={verifyOTP}
+                  style={[styles.primaryButton, { backgroundColor: theme.red2 }, loading && styles.disabledButton]}
                 >
-                  <Text style={styles.primaryButtonText}>Verify and enter</Text>
+                  <Text style={styles.primaryButtonText}>{loading ? "Verifying..." : "Verify and enter"}</Text>
                 </Pressable>
 
-                <Pressable onPress={() => setOtp("")}>
-                  <Text style={[styles.resend, { color: theme.red }]}>Resend OTP</Text>
-                </Pressable>
+                <View style={styles.otpActions}>
+                  <Pressable disabled={loading} onPress={sendOTP}>
+                    <Text style={[styles.resend, { color: theme.red }]}>Resend OTP</Text>
+                  </Pressable>
+                  <Pressable disabled={loading} onPress={() => setStep("phone")}>
+                    <Text style={[styles.resend, { color: theme.gold }]}>Change number</Text>
+                  </Pressable>
+                </View>
               </View>
             )}
+
+            {error ? <Text style={[styles.feedback, { color: theme.red }]}>{error}</Text> : null}
+            {message ? <Text style={[styles.feedback, { color: theme.green }]}>{message}</Text> : null}
 
             <Text style={[styles.disclaimer, { color: theme.muted }]}>
               By continuing you agree to the Momentra Terms and Privacy Policy.
@@ -358,42 +401,40 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 1,
     padding: 24,
-    shadowOffset: { width: 0, height: 22 },
+    shadowOffset: { height: 18, width: 0 },
     shadowOpacity: 0.18,
-    shadowRadius: 34,
-    elevation: 10,
+    shadowRadius: 28,
+    width: "100%",
   },
   features: {
     gap: 10,
-    marginBottom: 28,
+    marginBottom: 24,
   },
   feature: {
     alignItems: "center",
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    padding: 14,
   },
   featureIcon: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "800",
-    width: 24,
+    letterSpacing: 1,
   },
   featureText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    lineHeight: 20,
   },
   form: {
-    gap: 16,
+    gap: 14,
   },
   label: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0,
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 1.6,
     textTransform: "uppercase",
   },
   phoneRow: {
@@ -402,105 +443,77 @@ const styles = StyleSheet.create({
   },
   countryBox: {
     alignItems: "center",
-    borderRadius: 16,
+    borderRadius: 15,
     borderWidth: 1,
+    height: 52,
     justifyContent: "center",
-    minWidth: 68,
-    paddingHorizontal: 14,
+    width: 76,
   },
   countryText: {
     fontSize: 15,
     fontWeight: "700",
   },
   input: {
-    borderRadius: 16,
+    borderRadius: 15,
     borderWidth: 1,
     flex: 1,
     fontSize: 16,
-    fontWeight: "600",
-    minHeight: 58,
+    height: 52,
     paddingHorizontal: 16,
   },
   primaryButton: {
     alignItems: "center",
-    borderRadius: 18,
-    minHeight: 60,
+    borderRadius: 16,
+    height: 54,
     justifyContent: "center",
-    marginTop: 2,
-    shadowColor: "#8E332A",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    elevation: 5,
+    marginTop: 4,
+  },
+  disabledButton: {
+    opacity: 0.58,
   },
   primaryButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  dividerRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    marginVertical: 2,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-  },
-  or: {
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  googleButton: {
-    alignItems: "center",
-    borderRadius: 18,
-    borderWidth: 1,
-    minHeight: 58,
-    justifyContent: "center",
-  },
-  googleText: {
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   otpTitle: {
-    fontSize: 21,
-    fontWeight: "800",
-    textAlign: "center",
+    fontSize: 22,
+    fontWeight: "700",
   },
   otpHint: {
-    fontSize: 14,
-    lineHeight: 21,
-    marginBottom: 4,
-    textAlign: "center",
+    fontSize: 13,
+    lineHeight: 20,
   },
   otpInput: {
-    borderRadius: 18,
+    borderRadius: 15,
     borderWidth: 1,
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "700",
+    height: 56,
     letterSpacing: 8,
-    minHeight: 62,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     textAlign: "center",
   },
-  devNote: {
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: -8,
-    textAlign: "center",
+  otpActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 4,
   },
   resend: {
-    fontSize: 14,
-    fontWeight: "800",
-    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  feedback: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginTop: 14,
     textAlign: "center",
   },
   disclaimer: {
     fontSize: 11,
-    lineHeight: 18,
-    marginTop: 22,
+    lineHeight: 17,
+    marginTop: 18,
     textAlign: "center",
   },
 });
