@@ -58,6 +58,15 @@ function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
 }
 
+function logSupabaseUserError(context: string, error: { message?: string; details?: string | null; hint?: string | null; code?: string | null }) {
+  console.error(`[Momentra onboarding] ${context}`, {
+    code: error.code ?? null,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    message: error.message ?? "Unknown Supabase error",
+  });
+}
+
 export default function PersonaOnboardingScreen() {
   const { isDark } = useMomentraTheme();
   const T = isDark ? DARK : LIGHT;
@@ -73,6 +82,7 @@ export default function PersonaOnboardingScreen() {
   const [guestCount, setGuestCount] = useState("");
   const [dateTimePreference, setDateTimePreference] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [email, setEmail] = useState("");
   const saveInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -132,7 +142,6 @@ export default function PersonaOnboardingScreen() {
         budget,
         celebration_goal: goal,
         city: city.trim(),
-        created_at: now,
         date_time_preference: dateTimePreference.trim() || null,
         firebase_uid: user.uid,
         full_name: fullName.trim(),
@@ -143,21 +152,57 @@ export default function PersonaOnboardingScreen() {
         preferred_vibe: vibe,
         referral_code: referralCode.trim() || null,
       };
+      const insertPayload = {
+        ...payload,
+        created_at: now,
+      };
 
-      // #region agent log
-      {const _d={t:'onboarding-upsert-before',keys:Object.keys(payload),ts:Date.now()};console.log('[DBG-110cd2]',JSON.stringify(_d));try{const _l=JSON.parse(localStorage.getItem('dbg110cd2')||'[]');_l.push(_d);localStorage.setItem('dbg110cd2',JSON.stringify(_l));}catch(_){}}
-      // #endregion
-
-      const { error: upsertError } = await supabase
+      const firebaseMatch = await supabase
         .from("users")
-        .upsert(payload, { onConflict: "phone_number" });
+        .select("id")
+        .eq("firebase_uid", user.uid)
+        .limit(1);
 
-      // #region agent log
-      {const _d={t:'onboarding-upsert-after',hasError:Boolean(upsertError),errCode:upsertError?.code,errMsg:upsertError?.message,errDetails:upsertError?.details,errHint:upsertError?.hint,ts:Date.now()};console.log('[DBG-110cd2]',JSON.stringify(_d));try{const _l=JSON.parse(localStorage.getItem('dbg110cd2')||'[]');_l.push(_d);localStorage.setItem('dbg110cd2',JSON.stringify(_l));}catch(_){}}
-      // #endregion
+      if (firebaseMatch.error) {
+        logSupabaseUserError("firebase_uid lookup failed", firebaseMatch.error);
+        throw firebaseMatch.error;
+      }
 
-      if (upsertError) {
-        throw upsertError;
+      const firebaseRow = firebaseMatch.data?.[0];
+      const phoneMatch = firebaseRow
+        ? null
+        : await supabase
+            .from("users")
+            .select("id")
+            .eq("phone_number", phoneNumber)
+            .limit(1);
+
+      if (phoneMatch?.error) {
+        logSupabaseUserError("phone_number lookup failed", phoneMatch.error);
+        throw phoneMatch.error;
+      }
+
+      const existingId = firebaseRow?.id ?? phoneMatch?.data?.[0]?.id;
+      const write = existingId
+        ? await supabase
+            .from("users")
+            .update(payload)
+            .eq("id", existingId)
+            .select("id")
+            .single()
+        : await supabase
+            .from("users")
+            .insert(insertPayload)
+            .select("id")
+            .single();
+
+      if (write.error) {
+        logSupabaseUserError(existingId ? "user update failed" : "user insert failed", write.error);
+        throw write.error;
+      }
+
+      if (email.trim()) {
+        console.log("[Momentra onboarding] Email was entered but users.email does not exist in the current Supabase schema; skipping email save.");
       }
 
       router.replace("/profile");
@@ -232,6 +277,15 @@ export default function PersonaOnboardingScreen() {
             placeholderTextColor={T.text3}
             style={[s.input, { backgroundColor: T.field, borderColor: T.border2, color: T.text }]}
             value={fullName}
+          />
+          <TextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            onChangeText={setEmail}
+            placeholder="Email address (optional)"
+            placeholderTextColor={T.text3}
+            style={[s.input, { backgroundColor: T.field, borderColor: T.border2, color: T.text }]}
+            value={email}
           />
           <TextInput
             autoCapitalize="words"

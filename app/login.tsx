@@ -74,6 +74,15 @@ function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
 }
 
+function logSupabaseUserError(context: string, error: { message?: string; details?: string | null; hint?: string | null; code?: string | null }) {
+  console.error(`[Momentra auth] ${context}`, {
+    code: error.code ?? null,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    message: error.message ?? "Unknown Supabase error",
+  });
+}
+
 function otpErrorMessage(code: string) {
   switch (code) {
     case "auth/invalid-app-credential":
@@ -101,10 +110,14 @@ async function findExistingUser(phoneNumber: string) {
     .from("users")
     .select(USER_SELECT)
     .eq("phone_number", phoneNumber)
-    .maybeSingle();
+    .limit(1);
 
-  if (error) throw error;
-  return data;
+  if (error) {
+    logSupabaseUserError("phone_number lookup failed", error);
+    throw error;
+  }
+
+  return data?.[0] ?? null;
 }
 
 async function updateExistingUserLogin(user: User, phoneNumber: string) {
@@ -116,7 +129,10 @@ async function updateExistingUserLogin(user: User, phoneNumber: string) {
     })
     .eq("phone_number", phoneNumber);
 
-  if (error) throw error;
+  if (error) {
+    logSupabaseUserError("last_login update failed", error);
+    throw error;
+  }
 }
 
 export default function LoginScreen() {
