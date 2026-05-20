@@ -25,7 +25,7 @@ import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
 import {
   getRecaptchaVerifier,
-  resetRecaptchaVerifier,
+  initializeRecaptchaVerifier,
 } from "@/lib/firebase/recaptcha";
 import { supabase } from "@/lib/supabase";
 
@@ -74,15 +74,28 @@ function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
 }
 
+function logSupabaseUserError(context: string, error: { message?: string; details?: string | null; hint?: string | null; code?: string | null }) {
+  console.error(`[Momentra auth] ${context}`, {
+    code: error.code ?? null,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    message: error.message ?? "Unknown Supabase error",
+  });
+}
+
 async function findExistingUser(phoneNumber: string) {
   const { data, error } = await supabase
     .from("users")
     .select(USER_SELECT)
     .eq("phone_number", phoneNumber)
-    .maybeSingle();
+    .limit(1);
 
-  if (error) throw error;
-  return data;
+  if (error) {
+    logSupabaseUserError("phone_number lookup failed", error);
+    throw error;
+  }
+
+  return data?.[0] ?? null;
 }
 
 async function updateExistingUserLogin(user: User, phoneNumber: string) {
@@ -94,7 +107,10 @@ async function updateExistingUserLogin(user: User, phoneNumber: string) {
     })
     .eq("phone_number", phoneNumber);
 
-  if (error) throw error;
+  if (error) {
+    logSupabaseUserError("last_login update failed", error);
+    throw error;
+  }
 }
 
 export default function LoginScreen() {
@@ -188,6 +204,16 @@ export default function LoginScreen() {
     return unsubscribe;
   }, [authMode, loginExistingUser]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || Platform.OS !== "web" || !hasFirebaseEnv) return;
+
+    try {
+      initializeRecaptchaVerifier(firebaseAuth);
+    } catch (err) {
+      console.error("[Momentra auth] Firebase reCAPTCHA init failed", err);
+    }
+  }, []);
+
   function switchMode(nextMode: AuthMode) {
     setAuthMode(nextMode);
     setStep("phone");
@@ -222,14 +248,13 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const verifier = getRecaptchaVerifier(firebaseAuth);
+      const verifier = getRecaptchaVerifier();
       const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, verifier);
       setConfirmation(result);
       setStep("otp");
       setMessage(`OTP sent to ${fullPhone}`);
     } catch (err) {
       console.error("[Momentra auth] Firebase OTP send failed", err);
-      resetRecaptchaVerifier();
       showError("Could not send OTP. Please wait a moment and try again.");
     } finally {
       otpRequestInFlightRef.current = false;

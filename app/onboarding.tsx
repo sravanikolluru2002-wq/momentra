@@ -58,6 +58,15 @@ function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
 }
 
+function logSupabaseUserError(context: string, error: { message?: string; details?: string | null; hint?: string | null; code?: string | null }) {
+  console.error(`[Momentra onboarding] ${context}`, {
+    code: error.code ?? null,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    message: error.message ?? "Unknown Supabase error",
+  });
+}
+
 export default function PersonaOnboardingScreen() {
   const { isDark } = useMomentraTheme();
   const T = isDark ? DARK : LIGHT;
@@ -133,9 +142,7 @@ export default function PersonaOnboardingScreen() {
         budget,
         celebration_goal: goal,
         city: city.trim(),
-        created_at: now,
         date_time_preference: dateTimePreference.trim() || null,
-        email: email.trim() || null,
         firebase_uid: user.uid,
         full_name: fullName.trim(),
         guest_count: guestCount.trim() || null,
@@ -145,13 +152,57 @@ export default function PersonaOnboardingScreen() {
         preferred_vibe: vibe,
         referral_code: referralCode.trim() || null,
       };
+      const insertPayload = {
+        ...payload,
+        created_at: now,
+      };
 
-      const { error: upsertError } = await supabase
+      const firebaseMatch = await supabase
         .from("users")
-        .upsert(payload, { onConflict: "phone_number" });
+        .select("id")
+        .eq("firebase_uid", user.uid)
+        .limit(1);
 
-      if (upsertError) {
-        throw upsertError;
+      if (firebaseMatch.error) {
+        logSupabaseUserError("firebase_uid lookup failed", firebaseMatch.error);
+        throw firebaseMatch.error;
+      }
+
+      const firebaseRow = firebaseMatch.data?.[0];
+      const phoneMatch = firebaseRow
+        ? null
+        : await supabase
+            .from("users")
+            .select("id")
+            .eq("phone_number", phoneNumber)
+            .limit(1);
+
+      if (phoneMatch?.error) {
+        logSupabaseUserError("phone_number lookup failed", phoneMatch.error);
+        throw phoneMatch.error;
+      }
+
+      const existingId = firebaseRow?.id ?? phoneMatch?.data?.[0]?.id;
+      const write = existingId
+        ? await supabase
+            .from("users")
+            .update(payload)
+            .eq("id", existingId)
+            .select("id")
+            .single()
+        : await supabase
+            .from("users")
+            .insert(insertPayload)
+            .select("id")
+            .single();
+
+      if (write.error) {
+        logSupabaseUserError(existingId ? "user update failed" : "user insert failed", write.error);
+        throw write.error;
+      }
+
+      if (email.trim()) {
+        console.log("[Momentra onboarding] Email was entered but users.email does not exist in the current Supabase schema; skipping email save.");
       }
 
       router.replace("/profile");
