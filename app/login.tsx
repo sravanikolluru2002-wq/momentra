@@ -74,6 +74,28 @@ function isMissingColumnError(message: string) {
   return /column|schema cache|Could not find|does not exist/i.test(message);
 }
 
+function otpErrorMessage(code: string) {
+  switch (code) {
+    case "auth/invalid-app-credential":
+      return "Phone sign-in is not configured for this Momentra build. Enable Phone authentication for the Firebase project and add this domain to the authorised domains list.";
+    case "auth/captcha-check-failed":
+      return "Security check failed. Please refresh the page and try again.";
+    case "auth/too-many-requests":
+      return "Too many OTP requests from this device. Please wait a few minutes and try again.";
+    case "auth/quota-exceeded":
+      return "Daily OTP limit reached for this Momentra project. Please try again later.";
+    case "auth/invalid-phone-number":
+    case "auth/missing-phone-number":
+      return "That phone number does not look right. Please re-enter your 10-digit mobile number.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your connection and try again.";
+    case "auth/operation-not-allowed":
+      return "Phone sign-in is disabled for this Firebase project. Enable it under Authentication → Sign-in method.";
+    default:
+      return "Could not send OTP. Please wait a moment and try again.";
+  }
+}
+
 async function findExistingUser(phoneNumber: string) {
   const { data, error } = await supabase
     .from("users")
@@ -230,7 +252,8 @@ export default function LoginScreen() {
     } catch (err) {
       console.error("[Momentra auth] Firebase OTP send failed", err);
       resetRecaptchaVerifier();
-      showError("Could not send OTP. Please wait a moment and try again.");
+      const code = (err as { code?: string })?.code ?? "";
+      showError(otpErrorMessage(code));
     } finally {
       otpRequestInFlightRef.current = false;
       setLoading(false);

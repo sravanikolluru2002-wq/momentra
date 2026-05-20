@@ -65,7 +65,6 @@ export default function PersonaOnboardingScreen() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState("");
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
   const [goal, setGoal] = useState("");
   const [occasion, setOccasion] = useState("");
@@ -135,7 +134,6 @@ export default function PersonaOnboardingScreen() {
         city: city.trim(),
         created_at: now,
         date_time_preference: dateTimePreference.trim() || null,
-        email: email.trim() || null,
         firebase_uid: user.uid,
         full_name: fullName.trim(),
         guest_count: guestCount.trim() || null,
@@ -146,9 +144,17 @@ export default function PersonaOnboardingScreen() {
         referral_code: referralCode.trim() || null,
       };
 
+      // #region agent log
+      {const _d={t:'onboarding-upsert-before',keys:Object.keys(payload),ts:Date.now()};console.log('[DBG-110cd2]',JSON.stringify(_d));try{const _l=JSON.parse(localStorage.getItem('dbg110cd2')||'[]');_l.push(_d);localStorage.setItem('dbg110cd2',JSON.stringify(_l));}catch(_){}}
+      // #endregion
+
       const { error: upsertError } = await supabase
         .from("users")
         .upsert(payload, { onConflict: "phone_number" });
+
+      // #region agent log
+      {const _d={t:'onboarding-upsert-after',hasError:Boolean(upsertError),errCode:upsertError?.code,errMsg:upsertError?.message,errDetails:upsertError?.details,errHint:upsertError?.hint,ts:Date.now()};console.log('[DBG-110cd2]',JSON.stringify(_d));try{const _l=JSON.parse(localStorage.getItem('dbg110cd2')||'[]');_l.push(_d);localStorage.setItem('dbg110cd2',JSON.stringify(_l));}catch(_){}}
+      // #endregion
 
       if (upsertError) {
         throw upsertError;
@@ -226,15 +232,6 @@ export default function PersonaOnboardingScreen() {
             placeholderTextColor={T.text3}
             style={[s.input, { backgroundColor: T.field, borderColor: T.border2, color: T.text }]}
             value={fullName}
-          />
-          <TextInput
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="Email address (optional)"
-            placeholderTextColor={T.text3}
-            style={[s.input, { backgroundColor: T.field, borderColor: T.border2, color: T.text }]}
-            value={email}
           />
           <TextInput
             autoCapitalize="words"

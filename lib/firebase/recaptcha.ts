@@ -74,8 +74,12 @@ export function resetRecaptchaVerifier() {
   window.__momentraRecaptchaVerifier?.clear();
   window.__momentraRecaptchaVerifier = null;
 
+  // Remove the element from the DOM entirely. Clearing innerHTML alone is not enough —
+  // the Google reCAPTCHA library keeps an internal element→widgetId registry that
+  // survives clear() and innerHTML="", causing "already rendered" on the next attempt.
+  // Removing the node forces ensureRecaptchaRoot() to create a fresh element next time.
   const container = typeof document === "undefined" ? null : document.getElementById(RECAPTCHA_CONTAINER_ID);
   if (container) {
-    container.innerHTML = "";
+    container.parentElement?.removeChild(container);
   }
 }
