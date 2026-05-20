@@ -1,10 +1,10 @@
 import { Auth, RecaptchaVerifier } from "firebase/auth";
 
-const RECAPTCHA_CONTAINER_ID = "recaptcha-container";
+const RECAPTCHA_CONTAINER_ID = "momentra-recaptcha-root";
 
 declare global {
   interface Window {
-    recaptchaVerifier?: RecaptchaVerifier | null;
+    __momentraRecaptchaVerifier?: RecaptchaVerifier | null;
   }
 }
 
@@ -13,14 +13,32 @@ function getContainers() {
   return Array.from(document.querySelectorAll(`[id="${RECAPTCHA_CONTAINER_ID}"]`));
 }
 
-export function ensureSingleRecaptchaContainer() {
+function ensureRecaptchaRoot() {
+  if (typeof document === "undefined") return null;
+
   const containers = getContainers();
+  const root = containers[0] ?? document.createElement("div");
+
+  if (!root.id) {
+    root.id = RECAPTCHA_CONTAINER_ID;
+  }
 
   containers.slice(1).forEach((container) => {
     container.parentElement?.removeChild(container);
   });
 
-  return containers[0] ?? null;
+  if (!root.parentElement) {
+    root.style.height = "1px";
+    root.style.left = "-9999px";
+    root.style.opacity = "0";
+    root.style.overflow = "hidden";
+    root.style.position = "absolute";
+    root.style.top = "0";
+    root.style.width = "1px";
+    document.body.appendChild(root);
+  }
+
+  return root;
 }
 
 export function getRecaptchaVerifier(auth: Auth) {
@@ -28,12 +46,12 @@ export function getRecaptchaVerifier(auth: Auth) {
     throw new Error("Firebase reCAPTCHA is only available in the browser.");
   }
 
-  if (window.recaptchaVerifier) {
+  if (window.__momentraRecaptchaVerifier) {
     console.log("Using existing recaptcha verifier");
-    return window.recaptchaVerifier;
+    return window.__momentraRecaptchaVerifier;
   }
 
-  const container = ensureSingleRecaptchaContainer();
+  const container = ensureRecaptchaRoot();
 
   if (!container) {
     throw new Error("Firebase reCAPTCHA container is not ready. Please try again.");
@@ -41,25 +59,23 @@ export function getRecaptchaVerifier(auth: Auth) {
 
   container.innerHTML = "";
 
-  window.recaptchaVerifier =
-    window.recaptchaVerifier ||
+  window.__momentraRecaptchaVerifier =
+    window.__momentraRecaptchaVerifier ||
     new RecaptchaVerifier(auth, RECAPTCHA_CONTAINER_ID, {
       size: "invisible",
     });
 
-  return window.recaptchaVerifier;
+  return window.__momentraRecaptchaVerifier;
 }
 
 export function resetRecaptchaVerifier() {
   if (typeof window === "undefined") return;
 
-  window.recaptchaVerifier?.clear();
-  window.recaptchaVerifier = null;
+  window.__momentraRecaptchaVerifier?.clear();
+  window.__momentraRecaptchaVerifier = null;
 
-  const container = ensureSingleRecaptchaContainer();
+  const container = typeof document === "undefined" ? null : document.getElementById(RECAPTCHA_CONTAINER_ID);
   if (container) {
     container.innerHTML = "";
   }
 }
-
-export { RECAPTCHA_CONTAINER_ID };

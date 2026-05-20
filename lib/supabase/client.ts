@@ -17,14 +17,14 @@ const supabaseAnonKey =
 
 export const hasSupabaseEnv = Boolean(supabaseUrl && supabaseAnonKey);
 
-export function getSupabaseBrowserClient() {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      "Missing Supabase environment variables. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local and Vercel."
-    );
-  }
+if (!hasSupabaseEnv) {
+  console.warn(
+    "[Momentra data] Missing Supabase env vars. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY."
+  );
+}
 
-  return createClient(supabaseUrl, supabaseAnonKey, {
+export function getSupabaseBrowserClient() {
+  return createClient(supabaseUrl ?? "https://missing-supabase-url.supabase.co", supabaseAnonKey ?? "missing-supabase-anon-key", {
     auth: {
       autoRefreshToken: true,
       detectSessionInUrl: false,

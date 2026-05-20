@@ -1,7 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { onAuthStateChanged } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -62,6 +62,7 @@ export default function PersonaOnboardingScreen() {
   const { isDark } = useMomentraTheme();
   const T = isDark ? DARK : LIGHT;
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -73,12 +74,16 @@ export default function PersonaOnboardingScreen() {
   const [guestCount, setGuestCount] = useState("");
   const [dateTimePreference, setDateTimePreference] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const saveInFlightRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       if (!user?.phoneNumber) {
         router.replace("/login");
+        return;
       }
+
+      setCheckingSession(false);
     });
 
     return unsubscribe;
@@ -92,6 +97,8 @@ export default function PersonaOnboardingScreen() {
   }
 
   async function submitOnboarding() {
+    if (loading || saveInFlightRef.current || checkingSession) return;
+
     const user = firebaseAuth.currentUser;
     const phoneNumber = user?.phoneNumber;
 
@@ -116,6 +123,7 @@ export default function PersonaOnboardingScreen() {
       return;
     }
 
+    saveInFlightRef.current = true;
     setLoading(true);
     setError("");
 
@@ -154,9 +162,10 @@ export default function PersonaOnboardingScreen() {
       if (isMissingColumnError(text)) {
         showError("Supabase users table needs onboarding columns. See SQL in the implementation summary.");
       } else {
-        showError(text);
+        showError("We could not save your profile right now. Please try again.");
       }
     } finally {
+      saveInFlightRef.current = false;
       setLoading(false);
     }
   }
@@ -275,11 +284,13 @@ export default function PersonaOnboardingScreen() {
           {error ? <Text style={[s.error, { color: T.red }]}>{error}</Text> : null}
 
           <Pressable
-            disabled={loading}
+            disabled={loading || checkingSession}
             onPress={submitOnboarding}
-            style={[s.submit, { backgroundColor: T.red2 }, loading && { opacity: 0.55 }]}
+            style={[s.submit, { backgroundColor: T.red2 }, (loading || checkingSession) && { opacity: 0.55 }]}
           >
-            <Text style={s.submitText}>{loading ? "Saving..." : "Finish sign up"}</Text>
+            <Text style={s.submitText}>
+              {checkingSession ? "Checking session..." : loading ? "Saving..." : error ? "Retry sign up" : "Finish sign up"}
+            </Text>
           </Pressable>
         </View>
       </ScrollView>

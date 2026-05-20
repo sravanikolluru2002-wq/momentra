@@ -6,7 +6,7 @@ import {
   onAuthStateChanged,
   signInWithPhoneNumber,
 } from "firebase/auth";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -24,8 +24,6 @@ import {
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
 import {
-  RECAPTCHA_CONTAINER_ID,
-  ensureSingleRecaptchaContainer,
   getRecaptchaVerifier,
   resetRecaptchaVerifier,
 } from "@/lib/firebase/recaptcha";
@@ -106,9 +104,13 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<LoginStep>("phone");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [confirmation, setConfirmation] = useState<ConfirmationResult | null>(null);
+  const otpRequestInFlightRef = useRef(false);
+  const otpVerifyInFlightRef = useRef(false);
+  const loginLookupInFlightRef = useRef(false);
   const theme = isDark ? DARK : LIGHT;
 
   const normalizedPhone = phone.replace(/\D/g, "");
@@ -133,6 +135,8 @@ export default function LoginScreen() {
         return;
       }
 
+      if (loginLookupInFlightRef.current) return;
+      loginLookupInFlightRef.current = true;
       setLoading(true);
       setError("");
 
@@ -156,9 +160,10 @@ export default function LoginScreen() {
         if (isMissingColumnError(text)) {
           showError("Supabase users table needs phone_number, firebase_uid, and last_login columns.");
         } else {
-          showError(text);
+          showError("We could not check your Momentra account right now. Please try again.");
         }
       } finally {
+        loginLookupInFlightRef.current = false;
         setLoading(false);
       }
     },
@@ -173,6 +178,8 @@ export default function LoginScreen() {
         uid: user?.uid ?? null,
       });
 
+      setCheckingSession(false);
+
       if (authMode === "login" && user?.phoneNumber) {
         loginExistingUser(user);
       }
@@ -180,10 +187,6 @@ export default function LoginScreen() {
 
     return unsubscribe;
   }, [authMode, loginExistingUser]);
-
-  useEffect(() => {
-    ensureSingleRecaptchaContainer();
-  }, []);
 
   function switchMode(nextMode: AuthMode) {
     setAuthMode(nextMode);
@@ -195,6 +198,8 @@ export default function LoginScreen() {
   }
 
   async function sendOTP() {
+    if (loading || otpRequestInFlightRef.current) return;
+
     setError("");
     setMessage("");
 
@@ -213,6 +218,7 @@ export default function LoginScreen() {
       return;
     }
 
+    otpRequestInFlightRef.current = true;
     setLoading(true);
 
     try {
@@ -224,13 +230,16 @@ export default function LoginScreen() {
     } catch (err) {
       console.error("[Momentra auth] Firebase OTP send failed", err);
       resetRecaptchaVerifier();
-      showError(err instanceof Error ? err.message : "Could not send OTP.");
+      showError("Could not send OTP. Please wait a moment and try again.");
     } finally {
+      otpRequestInFlightRef.current = false;
       setLoading(false);
     }
   }
 
   async function confirmFirebaseCode() {
+    if (loading || otpVerifyInFlightRef.current) return;
+
     setError("");
     setMessage("");
 
@@ -245,6 +254,7 @@ export default function LoginScreen() {
       return;
     }
 
+    otpVerifyInFlightRef.current = true;
     setLoading(true);
 
     try {
@@ -258,8 +268,9 @@ export default function LoginScreen() {
       await loginExistingUser(user);
     } catch (err) {
       console.error("[Momentra auth] Firebase OTP verify failed", err);
-      showError(err instanceof Error ? err.message : "Could not verify OTP.");
+      showError("OTP verification failed. Please check the code or request a new OTP.");
     } finally {
+      otpVerifyInFlightRef.current = false;
       setLoading(false);
     }
   }
@@ -321,6 +332,9 @@ export default function LoginScreen() {
 
             {step === "phone" ? (
               <View style={styles.form}>
+                {checkingSession ? (
+                  <Text style={[styles.otpHint, { color: theme.text2 }]}>Checking your saved session...</Text>
+                ) : null}
                 <Text style={[styles.otpHint, { color: theme.text2 }]}>
                   {authMode === "login"
                     ? "Login checks your existing Momentra account after OTP."
@@ -347,11 +361,13 @@ export default function LoginScreen() {
 
                 <Pressable
                   android_ripple={{ color: "rgba(255,255,255,0.14)" }}
-                  disabled={loading}
+                  disabled={loading || checkingSession}
                   onPress={sendOTP}
-                  style={[styles.primaryButton, { backgroundColor: theme.red2 }, loading && styles.disabledButton]}
+                  style={[styles.primaryButton, { backgroundColor: theme.red2 }, (loading || checkingSession) && styles.disabledButton]}
                 >
-                  <Text style={styles.primaryButtonText}>{loading ? "Sending OTP..." : "Continue"}</Text>
+                  <Text style={styles.primaryButtonText}>
+                    {checkingSession ? "Checking..." : loading ? "Sending OTP..." : "Continue"}
+                  </Text>
                 </Pressable>
               </View>
             ) : step === "otp" ? (
@@ -396,7 +412,6 @@ export default function LoginScreen() {
 
             {error ? <Text style={[styles.feedback, { color: theme.red }]}>{error}</Text> : null}
             {message ? <Text style={[styles.feedback, { color: theme.green }]}>{message}</Text> : null}
-            <View nativeID={RECAPTCHA_CONTAINER_ID} style={styles.recaptchaBox} />
 
             <Text style={[styles.disclaimer, { color: theme.muted }]}>
               By continuing you agree to the Momentra Terms and Privacy Policy.
@@ -440,6 +455,5 @@ const styles = StyleSheet.create({
   otpActions: { flexDirection: "row", justifyContent: "space-between", marginTop: 4 },
   resend: { fontSize: 13, fontWeight: "700" },
   feedback: { fontSize: 12, fontWeight: "700", lineHeight: 18, marginTop: 14, textAlign: "center" },
-  recaptchaBox: { height: 1, opacity: 0, width: 1 },
   disclaimer: { fontSize: 11, lineHeight: 17, marginTop: 18, textAlign: "center" },
 });

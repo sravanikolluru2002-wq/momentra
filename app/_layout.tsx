@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Platform } from 'react-native';
 import 'react-native-reanimated';
 
+import { GlobalErrorBoundary } from '@/components/global-error-boundary';
 import { WebLayout } from '@/components/web-layout';
 import { MomentraThemeProvider } from '@/contexts/momentra-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -49,13 +50,15 @@ export default function RootLayout() {
   );
 
   return (
-    <MomentraThemeProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        {Platform.OS === 'web' ? (
-          <WebLayout landing={isWebLanding}>{content}</WebLayout>
-        ) : content}
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </MomentraThemeProvider>
+    <GlobalErrorBoundary>
+      <MomentraThemeProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          {Platform.OS === 'web' ? (
+            <WebLayout landing={isWebLanding}>{content}</WebLayout>
+          ) : content}
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </MomentraThemeProvider>
+    </GlobalErrorBoundary>
   );
 }
