@@ -1,0 +1,25 @@
+{
+  "name": "Momentra",
+  "short_name": "Momentra",
+  "description": "Premium curated celebration experiences.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0D0905",
+  "theme_color": "#0D0905",
+  "icons": [
+    {
+      "src": "/pwa-icon.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
