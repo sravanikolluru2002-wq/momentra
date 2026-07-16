@@ -5,6 +5,7 @@ export type WhatsAppCategory =
   | "corporate"
   | "dateNight"
   | "general"
+  | "houseParty"
   | "kitty"
   | "party"
   | "venue";
@@ -16,6 +17,7 @@ export const WHATSAPP_MESSAGES: Record<WhatsAppCategory, string> = {
   corporate: "Hi Momentra, I want to plan a corporate event.",
   dateNight: "Hi Momentra, I want to plan a date night experience.",
   general: "Hi Momentra, I want help planning an experience.",
+  houseParty: "Hi Momentra, I want to plan a house party at home.",
   kitty: "Hi Momentra, I want to plan a Kitty Circle event.",
   party: "Hi Momentra, I want to plan a group party.",
   venue: "Hi Momentra, I’m interested in this venue. Please share availability and details.",
@@ -42,6 +44,8 @@ export function whatsappCategoryFromOccasion(occasionId?: string): WhatsAppCateg
       return "dateNight";
     case "kitty":
       return "kitty";
+    case "house-party":
+      return "houseParty";
     case "party":
       return "party";
     default:

@@ -72,6 +72,7 @@ const CATEGORIES = [
   { id: "birthday", icon: "🎂", label: "Birthday" },
   { id: "datenight", icon: "❤️", label: "Date Night" },
   { id: "kitty", icon: "👯", label: "Kitty" },
+  { id: "house-party", icon: "🏠", label: "House Party" },
   { id: "party", icon: "🎉", label: "Party" },
   { id: "corporate", icon: "💼", label: "Corporate" },
   { id: "banquet", icon: "🏛️", label: "Banquet Hall" },
@@ -105,6 +106,32 @@ const EXPERIENCES: ExploreExperience[] = [
     rating: 4.8,
     tag: "new",
     img: "/venues/venue-1/cover.jpg",
+  },
+  {
+    id: 2,
+    detailId: "birthday-at-home",
+    cat: "house-party",
+    title: "Birthday at Home Setup",
+    venue: "At your home • Vizag",
+    desc: "Home decor setup, cake table styling, catering coordination, music add-ons, and cleanup support for private celebrations.",
+    price: 4999,
+    ppl: 12,
+    rating: 4.8,
+    tag: "new",
+    img: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=500&q=80",
+  },
+  {
+    id: 3,
+    detailId: "private-dinner-at-home",
+    cat: "house-party",
+    title: "Private Dinner at Home",
+    venue: "At your home • Vizag",
+    desc: "Styled private dinner at home with table design, food coordination, warm lighting, and optional host support.",
+    price: 6999,
+    ppl: 8,
+    rating: 4.7,
+    tag: "",
+    img: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=500&q=80",
   },
 ];
 
@@ -154,6 +181,7 @@ function normalizeCategory(value?: string | null) {
   const key = value?.toLowerCase().replace(/[\s_-]/g, "");
   if (key === "date" || key === "datenight" || key === "romantic") return "datenight";
   if (key === "kittyparty") return "kitty";
+  if (key === "houseparty" || key === "homeparty") return "house-party";
   if (key === "banquethall") return "banquet";
   return CATEGORIES.some((item) => item.id === value) ? value ?? "all" : "all";
 }

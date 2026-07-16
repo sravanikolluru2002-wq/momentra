@@ -18,7 +18,11 @@ import {
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth } from "@/firebase/config";
 import { normalizeIndianPhoneNumber } from "@/lib/phone";
-import { supabase } from "@/lib/supabase";
+import {
+  ensureCustomerProfile,
+  isMissingUserColumnError,
+  logSupabaseProfileError,
+} from "@/lib/supabase/customer-profile";
 
 const DARK = {
   bg: "#0D0905",
@@ -51,34 +55,9 @@ const LIGHT = {
 };
 
 const GOALS = ["Book a venue", "Plan a private celebration", "Find curated experiences", "Corporate event", "Explore ideas"];
-const OCCASIONS = ["Birthday", "Anniversary", "Date night", "Kitty party", "Wedding", "Corporate", "Proposal", "Custom"];
+const OCCASIONS = ["Birthday", "Anniversary", "Date night", "Kitty party", "House party", "Wedding", "Corporate", "Proposal", "Custom"];
 const BUDGETS = ["Under ₹3,000", "₹3,000 - ₹7,000", "₹7,000 - ₹15,000", "₹15,000+"];
 const VIBES = ["Luxury", "Romantic", "Family-friendly", "Trendy", "Calm", "Premium casual"];
-
-type SupabaseUserError = {
-  code?: string | null;
-  details?: string | null;
-  hint?: string | null;
-  message?: string;
-};
-
-function isMissingColumnError(message: string) {
-  return /column|schema cache|Could not find|does not exist/i.test(message);
-}
-
-function isMissingConflictConstraintError(error: SupabaseUserError) {
-  return error.code === "42P10" || /unique|constraint|on conflict/i.test(`${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`);
-}
-
-function logSupabaseUserError(context: string, error: SupabaseUserError, extra?: Record<string, unknown>) {
-  console.error(`[Momentra onboarding] ${context}`, {
-    code: error.code ?? null,
-    details: error.details ?? null,
-    hint: error.hint ?? null,
-    message: error.message ?? "Unknown Supabase error",
-    ...extra,
-  });
-}
 
 export default function PersonaOnboardingScreen() {
   const { isDark } = useMomentraTheme();
@@ -150,156 +129,38 @@ export default function PersonaOnboardingScreen() {
     setError("");
 
     try {
-      const now = new Date().toISOString();
       const payload = {
         budget,
         celebration_goal: goal,
         city: city.trim(),
         date_time_preference: dateTimePreference.trim() || null,
-        firebase_uid: user.uid,
         full_name: fullName.trim(),
         guest_count: guestCount.trim() || null,
-        last_login: now,
         occasion_type: occasion,
-        phone_number: phoneNumber,
         preferred_vibe: vibe,
         referral_code: referralCode.trim() || null,
       };
-      const insertPayload = {
-        ...payload,
-        created_at: now,
-      };
-      const selectColumns = "id,firebase_uid,phone_number,full_name,city,created_at";
 
-      console.log("[Momentra onboarding] users save payload columns", {
-        insertColumns: Object.keys(insertPayload),
+      console.log("[Momentra onboarding] profiles save payload columns", {
         updateColumns: Object.keys(payload),
+        firebase_uid: user.uid,
+        phone_number: phoneNumber,
       });
 
-      const firebaseMatch = await supabase
-        .from("users")
-        .select("id")
-        .eq("firebase_uid", user.uid)
-        .limit(1);
-
-      if (firebaseMatch.error) {
-        logSupabaseUserError("firebase_uid lookup failed", firebaseMatch.error, {
-          firebase_uid: user.uid,
-          phone_number: phoneNumber,
-          payloadColumns: Object.keys(payload),
-        });
-        throw firebaseMatch.error;
-      }
-
-      const phoneMatch = firebaseMatch.data?.[0]
-        ? null
-        : await supabase
-            .from("users")
-            .select("id")
-            .eq("phone_number", phoneNumber)
-            .limit(1);
-
-      if (phoneMatch?.error) {
-        logSupabaseUserError("phone_number lookup failed", phoneMatch.error, {
-          firebase_uid: user.uid,
-          phone_number: phoneNumber,
-          payloadColumns: Object.keys(payload),
-        });
-        throw phoneMatch.error;
-      }
-
-      const existingId = firebaseMatch.data?.[0]?.id ?? phoneMatch?.data?.[0]?.id;
-      let write = existingId
-        ? await supabase
-            .from("users")
-            .update(payload)
-            .eq("id", existingId)
-            .select(selectColumns)
-            .maybeSingle()
-        : await supabase
-            .from("users")
-            .upsert(insertPayload, { onConflict: "phone_number" })
-            .select(selectColumns)
-            .maybeSingle();
-
-      if (write.error) {
-        logSupabaseUserError(existingId ? "existing user update failed" : "phone_number upsert failed", write.error, {
-          conflictTarget: existingId ? null : "phone_number",
-          existingId: existingId ?? null,
-          firebase_uid: user.uid,
-          phone_number: phoneNumber,
-          payloadColumns: Object.keys(existingId ? payload : insertPayload),
-        });
-
-        if (!existingId && isMissingConflictConstraintError(write.error)) {
-          console.warn("[Momentra onboarding] phone_number has no unique constraint for upsert; trying firebase_uid upsert next.");
-
-          const firebaseUpsert = await supabase
-            .from("users")
-            .upsert(insertPayload, { onConflict: "firebase_uid" })
-            .select(selectColumns)
-            .maybeSingle();
-
-          if (firebaseUpsert.error) {
-            logSupabaseUserError("firebase_uid upsert failed", firebaseUpsert.error, {
-              conflictTarget: "firebase_uid",
-              firebase_uid: user.uid,
-              phone_number: phoneNumber,
-              payloadColumns: Object.keys(insertPayload),
-            });
-
-            if (!isMissingConflictConstraintError(firebaseUpsert.error)) {
-              throw firebaseUpsert.error;
-            }
-
-            console.warn("[Momentra onboarding] firebase_uid has no unique constraint for upsert; falling back to plain insert.");
-          } else {
-            write = firebaseUpsert;
-          }
-        } else {
-          throw write.error;
-        }
-      }
-
-      if (write.error) {
-        write = await supabase
-          .from("users")
-          .insert(insertPayload)
-          .select(selectColumns)
-          .maybeSingle();
-
-        if (write.error) {
-          logSupabaseUserError("fallback user insert failed", write.error, {
-            firebase_uid: user.uid,
-            phone_number: phoneNumber,
-            payloadColumns: Object.keys(insertPayload),
-          });
-          throw write.error;
-        }
-      }
-
-      if (write.error) {
-        logSupabaseUserError("user save failed", write.error, {
-          payloadColumns: Object.keys(insertPayload),
-        });
-        throw write.error;
-      }
+      await ensureCustomerProfile(user, payload, phoneNumber);
 
       if (email.trim()) {
-        console.log("[Momentra onboarding] Email was entered but users.email does not exist in the current Supabase schema; skipping email save.");
+        console.log("[Momentra onboarding] Email was entered but profiles.email does not exist in the current Supabase schema; skipping email save.");
       }
 
       router.replace("/profile");
     } catch (err) {
-      const supabaseError = err as SupabaseUserError;
-      const text = supabaseError?.message ?? (err instanceof Error ? err.message : "Could not save onboarding.");
-
-      logSupabaseUserError("save failed", supabaseError, {
+      logSupabaseProfileError("onboarding save failed", err, {
         rawError: err,
       });
 
-      if (isMissingColumnError(text)) {
-        showError("Supabase users table needs onboarding columns. See SQL in the implementation summary.");
+      if (isMissingUserColumnError(err)) {
+        showError("Supabase profiles table needs onboarding columns. See SQL in the implementation summary.");
       } else {
         showError("We could not save your profile right now. Please try again.");
       }

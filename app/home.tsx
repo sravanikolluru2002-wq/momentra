@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import {
   Animated,
-  Dimensions,
   Image,
   Platform,
   Pressable,
@@ -11,6 +10,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -19,8 +19,6 @@ import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
 import { openWhatsApp as openMomentraWhatsApp, WhatsAppCategory } from "@/lib/whatsapp";
 
-const { width } = Dimensions.get("window");
-const CARD_W = (width - 32 - 18) / 3;
 const TREND_W = 175;
 
 type OccasionItem = {
@@ -62,6 +60,13 @@ const OCCASIONS: OccasionItem[] = [
     label: "Kitty Party",
     desc: "Girls gatherings",
     img: "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=300&q=80",
+  },
+  {
+    id: "house-party",
+    icon: "🏠",
+    label: "House Party",
+    desc: "Private celebrations at home",
+    img: "https://images.unsplash.com/photo-1604014237800-1c9102c219da?w=300&q=80",
   },
   {
     id: "party",
@@ -108,8 +113,11 @@ const PROMISES = [
 export default function HomeScreen() {
   const router = useRouter();
   const { isDark } = useMomentraTheme();
+  const { width } = useWindowDimensions();
   const T = isDark ? DARK : LIGHT;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const occasionColumns = width < 430 ? 2 : width < 900 ? 3 : 4;
+  const occasionCardWidth = (width - 32 - 9 * (occasionColumns - 1)) / occasionColumns;
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -163,7 +171,7 @@ export default function HomeScreen() {
         onPress={() => openOccasion(item)}
         onPressIn={() => Animated.spring(scale, { speed: 50, toValue: 0.95, useNativeDriver: true }).start()}
         onPressOut={() => Animated.spring(scale, { speed: 30, toValue: 1, useNativeDriver: true }).start()}
-        style={styles.occCard}
+        style={[styles.occCard, { width: occasionCardWidth }]}
       >
         <Animated.View style={[styles.occInner, { transform: [{ scale }] }]}>
           <Image source={{ uri: item.img }} style={styles.occImg} resizeMode="cover" />
@@ -282,11 +290,8 @@ export default function HomeScreen() {
               <Text style={[styles.seeAll, { color: T.gold }]}>View all →</Text>
             </Pressable>
           </View>
-          <View style={styles.occRow}>
-            {OCCASIONS.slice(0, 3).map((item) => <OccasionCard key={item.id} item={item} />)}
-          </View>
-          <View style={[styles.occRow, styles.occRowSecond]}>
-            {OCCASIONS.slice(3, 6).map((item) => <OccasionCard key={item.id} item={item} />)}
+          <View style={styles.occGrid}>
+            {OCCASIONS.map((item) => <OccasionCard key={item.id} item={item} />)}
           </View>
         </View>
 
@@ -527,15 +532,13 @@ const styles = StyleSheet.create({
   secHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginBottom: 13 },
   secTitle: { fontSize: 18, fontWeight: "400" },
   seeAll: { fontSize: 11, fontWeight: "500" },
-  occRow: { flexDirection: "row", gap: 9 },
-  occRowSecond: { marginTop: 9 },
+  occGrid: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
   occCard: {
     borderColor: "rgba(201,151,90,0.12)",
     borderRadius: 15,
     borderWidth: 1,
     height: 108,
     overflow: "hidden",
-    width: CARD_W,
   },
   occInner: { borderRadius: 15, flex: 1, overflow: "hidden" },
   occImg: { ...StyleSheet.absoluteFillObject, opacity: 0.72 },

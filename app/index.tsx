@@ -64,6 +64,17 @@ function WebHome() {
             <Pressable onPress={() => router.push("/kitty" as never)} style={styles.primaryCta}>
               <Text style={styles.primaryCtaText}>Plan Kitty Party</Text>
             </Pressable>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: "/experiences",
+                  params: { occasionId: "house-party" },
+                } as never)
+              }
+              style={styles.housePartyCta}
+            >
+              <Text style={styles.primaryCtaText}>Plan House Party</Text>
+            </Pressable>
             <Pressable onPress={() => router.push("/corporate" as never)} style={styles.primaryCtaAlt}>
               <Text style={styles.primaryCtaText}>Plan Corporate Event</Text>
             </Pressable>
@@ -243,6 +254,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#A86F2A",
     borderRadius: 15,
     boxShadow: "0 14px 34px rgba(168,111,42,0.22)" as never,
+    paddingHorizontal: 22,
+    paddingVertical: 15,
+  },
+  housePartyCta: {
+    alignItems: "center",
+    backgroundColor: "#C9975A",
+    borderColor: "rgba(228,185,122,0.35)",
+    borderRadius: 15,
+    borderWidth: 1,
+    boxShadow: "0 14px 34px rgba(201,151,90,0.24)" as never,
     paddingHorizontal: 22,
     paddingVertical: 15,
   },

@@ -23,11 +23,12 @@ const KITTY_PARTY_IMAGE = require("../assets/kitty-party.png");
 
 export default function ExperiencesScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ occasionId?: string }>();
+  const params = useLocalSearchParams<{ category?: string; occasionId?: string }>();
   const { isDark } = useMomentraTheme();
   const theme = isDark ? DARK : LIGHT;
-  const occasion = getOccasion(params.occasionId);
-  const experiences = getExperiencesByOccasion(params.occasionId);
+  const selectedCategory = params.occasionId ?? params.category;
+  const occasion = getOccasion(selectedCategory);
+  const experiences = getExperiencesByOccasion(selectedCategory);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: theme.bg }]}>
@@ -94,7 +95,7 @@ export default function ExperiencesScreen() {
               <View style={styles.bottom}>
                 <View>
                   <Text style={[styles.price, { color: theme.gold }]}>
-                    {formatINR(experience.price)}
+                    {experience.priceLabel ?? formatINR(experience.price)}
                   </Text>
                   <Text style={[styles.forText, { color: theme.text3 }]}>
                     for up to {experience.capacity} people
