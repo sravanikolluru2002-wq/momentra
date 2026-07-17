@@ -26,6 +26,7 @@ import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
 import {
   getRecaptchaVerifier,
   initializeRecaptchaVerifier,
+  resetRecaptchaVerifier,
 } from "@/lib/firebase/recaptcha";
 import { normalizeIndianPhoneNumber } from "@/lib/phone";
 import {
@@ -71,6 +72,62 @@ const LIGHT = {
 
 type AuthMode = "login" | "signup";
 type LoginStep = "phone" | "otp" | "welcome";
+type SupabaseLoginError = {
+  code?: string | null;
+  details?: string | null;
+  hint?: string | null;
+  message?: string;
+  status?: number | string | null;
+};
+type FirebaseLoginError = {
+  code?: string | null;
+  customData?: unknown;
+  message?: string;
+  name?: string;
+};
+
+function getSupabaseLoginError(error: unknown) {
+  const supabaseError = error as SupabaseLoginError;
+
+  return {
+    message: supabaseError?.message ?? (error instanceof Error ? error.message : "Unknown Supabase error"),
+    code: supabaseError?.code ?? null,
+    details: supabaseError?.details ?? null,
+    hint: supabaseError?.hint ?? null,
+    status: supabaseError?.status ?? null,
+  };
+}
+
+function formatDevelopmentSupabaseError(error: ReturnType<typeof getSupabaseLoginError>) {
+  return [
+    "Supabase profile error",
+    `message: ${error.message}`,
+    `code: ${error.code ?? "n/a"}`,
+    `details: ${error.details ?? "n/a"}`,
+    `hint: ${error.hint ?? "n/a"}`,
+    `status: ${error.status ?? "n/a"}`,
+  ].join("\n");
+}
+
+function getFirebaseLoginError(error: unknown) {
+  const firebaseError = error as FirebaseLoginError;
+
+  return {
+    message: firebaseError?.message ?? (error instanceof Error ? error.message : "Unknown Firebase error"),
+    code: firebaseError?.code ?? null,
+    name: firebaseError?.name ?? (error instanceof Error ? error.name : null),
+    customData: firebaseError?.customData ?? null,
+  };
+}
+
+function formatDevelopmentFirebaseError(prefix: string, error: ReturnType<typeof getFirebaseLoginError>) {
+  return [
+    prefix,
+    `message: ${error.message}`,
+    `code: ${error.code ?? "n/a"}`,
+    `name: ${error.name ?? "n/a"}`,
+  ].join("\n");
+}
 
 export default function LoginScreen() {
   const { isDark } = useMomentraTheme();
@@ -86,6 +143,7 @@ export default function LoginScreen() {
   const otpRequestInFlightRef = useRef(false);
   const otpVerifyInFlightRef = useRef(false);
   const loginLookupInFlightRef = useRef(false);
+  const profileSyncUidRef = useRef<string | null>(null);
   const theme = isDark ? DARK : LIGHT;
 
   const normalizedPhone = phone.replace(/\D/g, "");
@@ -110,8 +168,9 @@ export default function LoginScreen() {
         return;
       }
 
-      if (loginLookupInFlightRef.current) return;
+      if (loginLookupInFlightRef.current || profileSyncUidRef.current === user.uid) return;
       loginLookupInFlightRef.current = true;
+      profileSyncUidRef.current = user.uid;
       setLoading(true);
       setError("");
 
@@ -121,13 +180,28 @@ export default function LoginScreen() {
         setStep("welcome");
         setTimeout(() => router.replace("/profile"), 650);
       } catch (err) {
+        const supabaseError = getSupabaseLoginError(err);
+
+        console.error("[Momentra login] profile ensure failed", {
+          message: supabaseError.message,
+          code: supabaseError.code,
+          details: supabaseError.details,
+          hint: supabaseError.hint,
+          status: supabaseError.status,
+        });
+
         logSupabaseProfileError("login profile ensure failed", err, {
           rawError: err,
         });
 
-        showError("We could not verify your account. Please try again.");
+        showError(
+          process.env.NODE_ENV === "development"
+            ? formatDevelopmentSupabaseError(supabaseError)
+            : "We could not verify your account. Please try again."
+        );
       } finally {
         loginLookupInFlightRef.current = false;
+        profileSyncUidRef.current = null;
         setLoading(false);
       }
     },
@@ -144,13 +218,13 @@ export default function LoginScreen() {
 
       setCheckingSession(false);
 
-      if (authMode === "login" && user?.phoneNumber) {
+      if (authMode === "login" && step === "phone" && !confirmation && user?.phoneNumber) {
         loginExistingUser(user);
       }
     });
 
     return unsubscribe;
-  }, [authMode, loginExistingUser]);
+  }, [authMode, confirmation, loginExistingUser, step]);
 
   useEffect(() => {
     if (typeof window === "undefined" || Platform.OS !== "web" || !hasFirebaseEnv) return;
@@ -169,6 +243,7 @@ export default function LoginScreen() {
     setMessage("");
     setError("");
     setConfirmation(null);
+    profileSyncUidRef.current = null;
   }
 
   async function sendOTP() {
@@ -196,14 +271,28 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const verifier = getRecaptchaVerifier();
+      const verifier = initializeRecaptchaVerifier(firebaseAuth) || getRecaptchaVerifier();
       const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, verifier);
       setConfirmation(result);
       setStep("otp");
       setMessage(`OTP sent to ${fullPhone}`);
     } catch (err) {
-      console.error("[Momentra auth] Firebase OTP send failed", err);
-      showError("Could not send OTP. Please wait a moment and try again.");
+      const firebaseError = getFirebaseLoginError(err);
+
+      console.error("[Momentra auth] Firebase OTP send failed", {
+        message: firebaseError.message,
+        code: firebaseError.code,
+        name: firebaseError.name,
+        customData: firebaseError.customData,
+      });
+
+      resetRecaptchaVerifier();
+      setConfirmation(null);
+      showError(
+        process.env.NODE_ENV === "development"
+          ? formatDevelopmentFirebaseError("Firebase OTP send failed", firebaseError)
+          : "Could not send OTP. Please wait a moment and try again."
+      );
     } finally {
       otpRequestInFlightRef.current = false;
       setLoading(false);
@@ -224,6 +313,7 @@ export default function LoginScreen() {
     if (!confirmation) {
       showError("Please request a fresh OTP first.");
       setStep("phone");
+      setOtp("");
       return;
     }
 
@@ -234,14 +324,28 @@ export default function LoginScreen() {
       const { user } = await confirmation.confirm(otp);
 
       if (authMode === "signup") {
+        setConfirmation(null);
         router.replace("/onboarding");
         return;
       }
 
       await loginExistingUser(user);
+      setConfirmation(null);
     } catch (err) {
-      console.error("[Momentra auth] Firebase OTP verify failed", err);
-      showError("OTP verification failed. Please check the code or request a new OTP.");
+      const firebaseError = getFirebaseLoginError(err);
+
+      console.error("[Momentra auth] Firebase OTP verify failed", {
+        message: firebaseError.message,
+        code: firebaseError.code,
+        name: firebaseError.name,
+        customData: firebaseError.customData,
+      });
+
+      showError(
+        process.env.NODE_ENV === "development"
+          ? formatDevelopmentFirebaseError("Firebase OTP verification failed", firebaseError)
+          : "OTP verification failed. Please check the code or request a new OTP."
+      );
     } finally {
       otpVerifyInFlightRef.current = false;
       setLoading(false);
@@ -371,7 +475,14 @@ export default function LoginScreen() {
                   <Pressable disabled={loading} onPress={sendOTP}>
                     <Text style={[styles.resend, { color: theme.red }]}>Resend OTP</Text>
                   </Pressable>
-                  <Pressable disabled={loading} onPress={() => setStep("phone")}>
+                  <Pressable
+                    disabled={loading}
+                    onPress={() => {
+                      setStep("phone");
+                      setOtp("");
+                      setConfirmation(null);
+                    }}
+                  >
                     <Text style={[styles.resend, { color: theme.gold }]}>Change number</Text>
                   </Pressable>
                 </View>

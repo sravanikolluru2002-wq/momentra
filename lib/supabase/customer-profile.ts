@@ -9,6 +9,7 @@ export type CustomerProfileRow = {
   firebase_uid: string | null;
   full_name: string | null;
   id: string;
+  last_login: string | null;
   phone_number: string | null;
 };
 
@@ -35,7 +36,7 @@ type ProfilePayload = {
 };
 
 const PROFILE_TABLE = "profiles";
-const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at";
+const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login";
 
 export function logSupabaseProfileError(context: string, error: SupabaseProfileError | Error | unknown, extra?: Record<string, unknown>) {
   const supabaseError = error as SupabaseProfileError;
@@ -55,10 +56,6 @@ function cleanPayload<T extends Record<string, unknown>>(payload: T) {
   ) as Partial<T>;
 }
 
-function isDuplicateRowError(error: SupabaseProfileError | null | undefined) {
-  return error?.code === "23505" || /duplicate key|already exists/i.test(`${error?.message ?? ""} ${error?.details ?? ""}`);
-}
-
 export function getFirebaseProfileIdentity(user: FirebaseUser, phoneOverride?: string | null) {
   const phoneNumber = normalizeIndianPhoneNumber(phoneOverride ?? user.phoneNumber);
 
@@ -68,106 +65,41 @@ export function getFirebaseProfileIdentity(user: FirebaseUser, phoneOverride?: s
   };
 }
 
-export async function findCustomerProfile(firebaseUid: string, phoneNumber?: string | null) {
-  const normalizedPhone = normalizeIndianPhoneNumber(phoneNumber);
-  const lookups = [
-    { column: "firebase_uid", value: firebaseUid },
-    { column: "phone_number", value: normalizedPhone },
-  ].filter((lookup) => lookup.value);
-
-  for (const lookup of lookups) {
-    const result = await supabase
-      .from(PROFILE_TABLE)
-      .select(PROFILE_SELECT)
-      .eq(lookup.column, lookup.value)
-      .limit(1);
-
-    if (result.error) {
-      logSupabaseProfileError(`${lookup.column} lookup failed`, result.error, {
-        firebase_uid: firebaseUid,
-        phone_number: normalizedPhone,
-      });
-      throw result.error;
-    }
-
-    const row = result.data?.[0] as CustomerProfileRow | undefined;
-
-    if (row) return row;
-  }
-
-  return null;
-}
-
-async function writeCustomerProfile(existingId: string | null, payload: ProfilePayload) {
-  const now = new Date().toISOString();
-  const insertPayload = cleanPayload({ ...payload, created_at: now });
-  const updatePayload = cleanPayload(payload);
-
-  if (existingId) {
-    return supabase
-      .from(PROFILE_TABLE)
-      .update(updatePayload)
-      .eq("id", existingId)
-      .select(PROFILE_SELECT)
-      .maybeSingle();
-  }
-
-  return supabase
-    .from(PROFILE_TABLE)
-    .insert(insertPayload)
-    .select(PROFILE_SELECT)
-    .maybeSingle();
-}
-
 export async function ensureCustomerProfile(
   user: FirebaseUser,
   fields: Partial<Omit<ProfilePayload, "firebase_uid" | "last_login" | "phone_number">> = {},
   phoneOverride?: string | null
 ) {
-  const { firebaseUid, phoneNumber } = getFirebaseProfileIdentity(user, phoneOverride);
+  const { firebaseUid, phoneNumber: normalizedPhone } = getFirebaseProfileIdentity(user, phoneOverride);
 
-  if (!phoneNumber) {
+  if (!normalizedPhone) {
     throw new Error("Firebase user does not have a phone number.");
   }
 
-  const now = new Date().toISOString();
-  const existing = await findCustomerProfile(firebaseUid, phoneNumber);
-  const profilePayload: ProfilePayload = {
-    ...fields,
+  const payload = cleanPayload({
     firebase_uid: firebaseUid,
-    last_login: now,
-    phone_number: phoneNumber,
-  };
+    phone_number: normalizedPhone,
+    last_login: new Date().toISOString(),
+    ...fields,
+  });
 
-  let write = await writeCustomerProfile(existing?.id ?? null, profilePayload);
+  const { data, error } = await supabase
+    .from(PROFILE_TABLE)
+    .upsert(payload, {
+      onConflict: "firebase_uid",
+    })
+    .select(PROFILE_SELECT)
+    .single();
 
-  if (write.error && !existing && isDuplicateRowError(write.error)) {
-    logSupabaseProfileError("profile insert hit duplicate row; retrying lookup and update", write.error, {
-      firebase_uid: firebaseUid,
-      phone_number: phoneNumber,
+  if (error) {
+    console.error("[Momentra profile] upsert failed", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
     });
-
-    const duplicate = await findCustomerProfile(firebaseUid, phoneNumber);
-
-    if (duplicate?.id) {
-      write = await writeCustomerProfile(duplicate.id, profilePayload);
-    }
+    throw error;
   }
 
-  if (write.error) {
-    logSupabaseProfileError("profile write failed", write.error, {
-      existingId: existing?.id ?? null,
-      firebase_uid: firebaseUid,
-      phone_number: phoneNumber,
-      attemptedColumns: Object.keys(cleanPayload(profilePayload)),
-    });
-    throw write.error;
-  }
-
-  if (write.data) return write.data as CustomerProfileRow;
-
-  const repaired = await findCustomerProfile(firebaseUid, phoneNumber);
-  if (repaired) return repaired;
-
-  throw new Error("Supabase profile write returned no user row.");
+  return data as CustomerProfileRow;
 }

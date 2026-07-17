@@ -8,36 +8,6 @@ type SyncResult = {
   ok: boolean;
 };
 
-async function tryUpdateThenInsert(
-  supabase: SupabaseClient,
-  matchColumn: string,
-  matchValue: string,
-  payload: Record<string, string>
-) {
-  const update = await supabase
-    .from("profiles")
-    .update(payload)
-    .eq(matchColumn, matchValue)
-    .select("id")
-    .limit(1);
-
-  if (update.error) {
-    return { error: update.error.message };
-  }
-
-  if ((update.data ?? []).length > 0) {
-    return { ok: true };
-  }
-
-  const insert = await supabase.from("profiles").insert(payload).select("id").limit(1);
-
-  if (insert.error) {
-    return { error: insert.error.message };
-  }
-
-  return { ok: true };
-}
-
 export async function syncFirebaseCustomerUser(
   supabase: SupabaseClient,
   user: FirebaseUser
@@ -56,17 +26,24 @@ export async function syncFirebaseCustomerUser(
     updated_at: now,
   };
 
-  for (const [matchColumn, matchValue] of [
-    ["firebase_uid", user.uid],
-    ["phone_number", phoneNumber],
-  ] as const) {
-    const result = await tryUpdateThenInsert(supabase, matchColumn, matchValue, payload);
+  const { error } = await supabase
+    .from("profiles")
+    .upsert(payload, {
+      onConflict: "firebase_uid",
+    })
+    .select("id")
+    .single();
 
-    if (result.ok) return { ok: true };
+  if (error) {
+    console.error("[Momentra profile] sync upsert failed", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+
+    return { error: error.message, ok: false };
   }
 
-  return {
-    error: "Could not sync Firebase user profile.",
-    ok: false,
-  };
+  return { ok: true };
 }
