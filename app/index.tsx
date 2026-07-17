@@ -47,9 +47,17 @@ function WebHome() {
 
         <View style={styles.nav}>
           <Image source={require("../assets/logo.png")} style={styles.logo} resizeMode="contain" />
-          <Pressable onPress={() => router.push("/login" as never)} style={styles.loginLink}>
-            <Text style={styles.loginText}>Login / Continue</Text>
-          </Pressable>
+          <View style={styles.navActions}>
+            <Pressable onPress={() => router.push("/admin-login" as never)} style={styles.adminLink}>
+              <Text style={styles.adminText}>Admin Login</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push("/partner-login" as never)} style={styles.partnerLink}>
+              <Text style={styles.partnerText}>Partner Login</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push("/login" as never)} style={styles.loginLink}>
+              <Text style={styles.loginText}>Login / Continue</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={[styles.heroInner, compact && styles.heroInnerCompact]}>
@@ -237,6 +245,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   logo: { height: 72, width: 190 },
+  navActions: { alignItems: "center", flexDirection: "row", gap: 10 },
   loginLink: {
     backgroundColor: "rgba(242,232,217,0.06)",
     borderColor: "rgba(201,151,90,0.24)",
@@ -245,7 +254,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  partnerLink: {
+    backgroundColor: "rgba(192,57,43,0.14)",
+    borderColor: "rgba(201,151,90,0.22)",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  adminLink: {
+    backgroundColor: "rgba(168,111,42,0.16)",
+    borderColor: "rgba(201,151,90,0.24)",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
   loginText: { color: "#E4B97A", fontSize: 13, fontWeight: "800" },
+  adminText: { color: "#F2E8D9", fontSize: 13, fontWeight: "800" },
+  partnerText: { color: "#F2E8D9", fontSize: 13, fontWeight: "800" },
   heroInner: {
     marginHorizontal: "auto",
     maxWidth: 1120,

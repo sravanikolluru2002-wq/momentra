@@ -24,6 +24,7 @@ import {
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
 import {
+  ensureRecaptchaVerifier,
   getRecaptchaVerifier,
   initializeRecaptchaVerifier,
   resetRecaptchaVerifier,
@@ -230,7 +231,7 @@ export default function LoginScreen() {
     if (typeof window === "undefined" || Platform.OS !== "web" || !hasFirebaseEnv) return;
 
     try {
-      initializeRecaptchaVerifier(firebaseAuth);
+      void ensureRecaptchaVerifier(firebaseAuth);
     } catch (err) {
       console.error("[Momentra auth] Firebase reCAPTCHA init failed", err);
     }
@@ -272,6 +273,14 @@ export default function LoginScreen() {
 
     try {
       const verifier = initializeRecaptchaVerifier(firebaseAuth) || getRecaptchaVerifier();
+      let verifier;
+
+      try {
+        verifier = getRecaptchaVerifier();
+        await verifier.render();
+      } catch {
+        verifier = await ensureRecaptchaVerifier(firebaseAuth);
+      }
       const result = await signInWithPhoneNumber(firebaseAuth, fullPhone, verifier);
       setConfirmation(result);
       setStep("otp");
@@ -288,6 +297,12 @@ export default function LoginScreen() {
 
       resetRecaptchaVerifier();
       setConfirmation(null);
+      try {
+        await ensureRecaptchaVerifier(firebaseAuth);
+      } catch (recaptchaError) {
+        console.error("[Momentra auth] Firebase reCAPTCHA re-init failed", recaptchaError);
+      }
+
       showError(
         process.env.NODE_ENV === "development"
           ? formatDevelopmentFirebaseError("Firebase OTP send failed", firebaseError)
@@ -408,6 +423,21 @@ export default function LoginScreen() {
             ) : null}
 
             {step === "phone" ? (
+              <Pressable
+                onPress={() => router.push("/partner-login")}
+                style={[styles.partnerEntry, { backgroundColor: theme.featureBg, borderColor: theme.featureBorder }]}
+              >
+                <View style={styles.partnerCopy}>
+                  <Text style={[styles.partnerEntryTitle, { color: theme.text }]}>Partner login</Text>
+                  <Text style={[styles.partnerEntryText, { color: theme.text2 }]}>
+                    Venue and service partners now open a live backend-backed dashboard profile.
+                  </Text>
+                </View>
+                <Text style={[styles.partnerEntryAction, { color: theme.gold }]}>Open</Text>
+              </Pressable>
+            ) : null}
+
+            {step === "phone" ? (
               <View style={styles.form}>
                 {checkingSession ? (
                   <Text style={[styles.otpHint, { color: theme.text2 }]}>Checking your saved session...</Text>
@@ -524,6 +554,11 @@ const styles = StyleSheet.create({
   modeRow: { borderRadius: 16, borderWidth: 1, flexDirection: "row", marginBottom: 18, overflow: "hidden", padding: 4 },
   modeButton: { alignItems: "center", borderRadius: 12, flex: 1, paddingVertical: 11 },
   modeText: { fontSize: 13, fontWeight: "800" },
+  partnerEntry: { alignItems: "center", borderRadius: 18, borderWidth: 1, flexDirection: "row", gap: 14, justifyContent: "space-between", marginBottom: 18, padding: 16 },
+  partnerCopy: { flex: 1, gap: 4 },
+  partnerEntryTitle: { fontSize: 14, fontWeight: "800" },
+  partnerEntryText: { fontSize: 12, lineHeight: 18 },
+  partnerEntryAction: { fontSize: 13, fontWeight: "800" },
   form: { gap: 14 },
   label: { fontSize: 10, fontWeight: "700", letterSpacing: 1.6, textTransform: "uppercase" },
   phoneRow: { flexDirection: "row", gap: 10 },

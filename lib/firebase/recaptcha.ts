@@ -70,6 +70,17 @@ export function initializeRecaptchaVerifier(auth: Auth) {
   return window.__momentraRecaptchaVerifier;
 }
 
+export async function ensureRecaptchaVerifier(auth: Auth) {
+  const verifier = initializeRecaptchaVerifier(auth);
+  const widgetId = await verifier.render();
+
+  if (typeof window !== "undefined") {
+    window.__momentraRecaptchaWidgetId = widgetId;
+  }
+
+  return verifier;
+}
+
 export function getRecaptchaVerifier() {
   if (typeof window === "undefined" || !window.__momentraRecaptchaVerifier) {
     throw new Error("Firebase reCAPTCHA is not ready. Please try again.");
