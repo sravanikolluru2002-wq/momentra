@@ -20,7 +20,6 @@ import { firebaseAuth } from "@/firebase/config";
 import { normalizeIndianPhoneNumber } from "@/lib/phone";
 import {
   ensureCustomerProfile,
-  isMissingUserColumnError,
   logSupabaseProfileError,
 } from "@/lib/supabase/customer-profile";
 
@@ -159,11 +158,7 @@ export default function PersonaOnboardingScreen() {
         rawError: err,
       });
 
-      if (isMissingUserColumnError(err)) {
-        showError("Supabase profiles table needs onboarding columns. See SQL in the implementation summary.");
-      } else {
-        showError("We could not save your profile right now. Please try again.");
-      }
+      showError("We could not save your profile right now. Please try again.");
     } finally {
       saveInFlightRef.current = false;
       setLoading(false);

@@ -37,16 +37,6 @@ type ProfilePayload = {
 const PROFILE_TABLE = "profiles";
 const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at";
 
-export function isMissingUserColumnError(error: SupabaseProfileError | Error | unknown) {
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "object" && error
-      ? `${(error as SupabaseProfileError).message ?? ""} ${(error as SupabaseProfileError).details ?? ""}`
-      : String(error ?? "");
-
-  return /column|schema cache|Could not find|does not exist/i.test(text);
-}
-
 export function logSupabaseProfileError(context: string, error: SupabaseProfileError | Error | unknown, extra?: Record<string, unknown>) {
   const supabaseError = error as SupabaseProfileError;
 
@@ -142,31 +132,14 @@ export async function ensureCustomerProfile(
 
   const now = new Date().toISOString();
   const existing = await findCustomerProfile(firebaseUid, phoneNumber);
-  const fullPayload: ProfilePayload = {
+  const profilePayload: ProfilePayload = {
     ...fields,
     firebase_uid: firebaseUid,
     last_login: now,
     phone_number: phoneNumber,
   };
-  const basePayload: ProfilePayload = {
-    city: fields.city,
-    firebase_uid: firebaseUid,
-    full_name: fields.full_name,
-    last_login: now,
-    phone_number: phoneNumber,
-  };
 
-  let write = await writeCustomerProfile(existing?.id ?? null, fullPayload);
-
-  if (write.error && isMissingUserColumnError(write.error)) {
-    logSupabaseProfileError("full profile write failed; retrying required profile columns only", write.error, {
-      firebase_uid: firebaseUid,
-      phone_number: phoneNumber,
-      attemptedColumns: Object.keys(cleanPayload(fullPayload)),
-    });
-
-    write = await writeCustomerProfile(existing?.id ?? null, basePayload);
-  }
+  let write = await writeCustomerProfile(existing?.id ?? null, profilePayload);
 
   if (write.error && !existing && isDuplicateRowError(write.error)) {
     logSupabaseProfileError("profile insert hit duplicate row; retrying lookup and update", write.error, {
@@ -177,17 +150,7 @@ export async function ensureCustomerProfile(
     const duplicate = await findCustomerProfile(firebaseUid, phoneNumber);
 
     if (duplicate?.id) {
-      write = await writeCustomerProfile(duplicate.id, fullPayload);
-
-      if (write.error && isMissingUserColumnError(write.error)) {
-        logSupabaseProfileError("duplicate-row update failed; retrying required profile columns only", write.error, {
-          firebase_uid: firebaseUid,
-          phone_number: phoneNumber,
-          attemptedColumns: Object.keys(cleanPayload(fullPayload)),
-        });
-
-        write = await writeCustomerProfile(duplicate.id, basePayload);
-      }
+      write = await writeCustomerProfile(duplicate.id, profilePayload);
     }
   }
 
@@ -196,7 +159,7 @@ export async function ensureCustomerProfile(
       existingId: existing?.id ?? null,
       firebase_uid: firebaseUid,
       phone_number: phoneNumber,
-      attemptedColumns: Object.keys(cleanPayload(write.error && isMissingUserColumnError(write.error) ? basePayload : fullPayload)),
+      attemptedColumns: Object.keys(cleanPayload(profilePayload)),
     });
     throw write.error;
   }

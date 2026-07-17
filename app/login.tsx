@@ -30,7 +30,6 @@ import {
 import { normalizeIndianPhoneNumber } from "@/lib/phone";
 import {
   ensureCustomerProfile,
-  isMissingUserColumnError,
   logSupabaseProfileError,
 } from "@/lib/supabase/customer-profile";
 
@@ -126,11 +125,7 @@ export default function LoginScreen() {
           rawError: err,
         });
 
-        if (isMissingUserColumnError(err)) {
-          showError("Supabase profiles table needs phone_number, firebase_uid, and last_login columns.");
-        } else {
-          showError("We could not verify your account. Please try again.");
-        }
+        showError("We could not verify your account. Please try again.");
       } finally {
         loginLookupInFlightRef.current = false;
         setLoading(false);
