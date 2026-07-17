@@ -26,7 +26,6 @@ import { firebaseAuth, hasFirebaseEnv } from "@/firebase/config";
 import {
   ensureRecaptchaVerifier,
   getRecaptchaVerifier,
-  initializeRecaptchaVerifier,
   resetRecaptchaVerifier,
 } from "@/lib/firebase/recaptcha";
 import { normalizeIndianPhoneNumber } from "@/lib/phone";
@@ -272,7 +271,6 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      const verifier = initializeRecaptchaVerifier(firebaseAuth) || getRecaptchaVerifier();
       let verifier;
 
       try {
