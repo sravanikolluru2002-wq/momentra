@@ -17,7 +17,7 @@ async function tryUpdateThenInsert(
   payload: Record<string, string>
 ) {
   const update = await supabase
-    .from("users")
+    .from("profiles")
     .update(payload)
     .eq(matchColumn, matchValue)
     .select("id")
@@ -31,7 +31,7 @@ async function tryUpdateThenInsert(
     return { ok: true };
   }
 
-  const insert = await supabase.from("users").insert(payload).select("id").limit(1);
+  const insert = await supabase.from("profiles").insert(payload).select("id").limit(1);
 
   if (insert.error) {
     return { error: insert.error.message, schemaError: isSchemaError(insert.error.message) };
@@ -113,7 +113,7 @@ export async function syncFirebaseCustomerUser(
   }
 
   return {
-    error: lastError || "Could not sync Firebase user profile. Check the users table columns.",
+    error: lastError || "Could not sync Firebase user profile. Check the profiles table columns.",
     ok: false,
   };
 }

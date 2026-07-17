@@ -19,7 +19,11 @@ import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth } from "@/firebase/config";
 import { resetRecaptchaVerifier } from "@/lib/firebase/recaptcha";
-import { supabase } from "@/lib/supabase";
+import {
+  CustomerProfileRow,
+  ensureCustomerProfile,
+  logSupabaseProfileError,
+} from "@/lib/supabase/customer-profile";
 
 type ScreenId =
   | "main"
@@ -38,14 +42,7 @@ type ScreenId =
 
 type Palette = typeof DARK;
 
-type CustomerProfile = {
-  city: string | null;
-  created_at: string | null;
-  firebase_uid: string | null;
-  full_name: string | null;
-  id: string;
-  phone_number: string | null;
-};
+type CustomerProfile = CustomerProfileRow;
 
 const DARK = {
   bg: "#0d0905",
@@ -322,41 +319,8 @@ export default function ProfileScreen() {
     setProfileLoading(true);
 
     try {
-      const columns = "id,firebase_uid,phone_number,full_name,city,created_at";
-      const byFirebase = await supabase
-        .from("users")
-        .select(columns)
-        .eq("firebase_uid", firebaseUser.uid)
-        .limit(1);
-
-      if (byFirebase.error) {
-        console.error("[Momentra profile] firebase_uid profile lookup failed", {
-          details: byFirebase.error.details,
-          message: byFirebase.error.message,
-        });
-        throw byFirebase.error;
-      }
-
-      let row = (byFirebase.data?.[0] ?? null) as CustomerProfile | null;
       const phone = firebaseUser.phoneNumber ?? "";
-
-      if (!row && phone) {
-        const byPhone = await supabase
-          .from("users")
-          .select(columns)
-          .eq("phone_number", phone)
-          .limit(1);
-
-        if (byPhone.error) {
-          console.error("[Momentra profile] phone_number profile lookup failed", {
-            details: byPhone.error.details,
-            message: byPhone.error.message,
-          });
-          throw byPhone.error;
-        }
-
-        row = (byPhone.data?.[0] ?? null) as CustomerProfile | null;
-      }
+      const row = await ensureCustomerProfile(firebaseUser, {}, phone);
 
       setProfile(row);
       setCity(row?.city?.trim() || "Vizag");
@@ -364,7 +328,7 @@ export default function ProfileScreen() {
       setEditCity(row?.city?.trim() || "Vizag");
       setEditPhone(row?.phone_number || phone);
     } catch (error) {
-      console.error("[Momentra profile] Could not load Supabase profile", error);
+      logSupabaseProfileError("profile load/ensure failed", error);
       showToast("We could not load your profile details.");
       setEditFullName(firebaseUser.displayName || "");
       setEditCity("Vizag");
@@ -389,37 +353,11 @@ export default function ProfileScreen() {
     setSavingProfile(true);
 
     try {
-      const now = new Date().toISOString();
-      const updatePayload = {
+      const nextProfile = await ensureCustomerProfile(user, {
         city: cleanCity || null,
-        firebase_uid: user.uid,
         full_name: cleanName,
-        phone_number: cleanPhone,
-        last_login: now,
-      };
+      }, cleanPhone);
 
-      const write = profile?.id
-        ? await supabase
-            .from("users")
-            .update(updatePayload)
-            .eq("id", profile.id)
-            .select("id,firebase_uid,phone_number,full_name,city,created_at")
-            .single()
-        : await supabase
-            .from("users")
-            .insert({ ...updatePayload, created_at: now })
-            .select("id,firebase_uid,phone_number,full_name,city,created_at")
-            .single();
-
-      if (write.error) {
-        console.error("[Momentra profile] user profile save failed", {
-          details: write.error.details,
-          message: write.error.message,
-        });
-        throw write.error;
-      }
-
-      const nextProfile = write.data as CustomerProfile;
       setProfile(nextProfile);
       setCity(nextProfile.city?.trim() || "Vizag");
       setEditFullName(nextProfile.full_name?.trim() || cleanName);
@@ -428,7 +366,7 @@ export default function ProfileScreen() {
       closeScreen();
       showToast("Profile saved successfully");
     } catch (error) {
-      console.error("[Momentra profile] Could not save profile", error);
+      logSupabaseProfileError("profile save failed", error);
       showToast("We could not save your profile right now.");
     } finally {
       setSavingProfile(false);

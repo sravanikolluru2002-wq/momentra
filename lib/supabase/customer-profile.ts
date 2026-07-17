@@ -34,7 +34,7 @@ type ProfilePayload = {
   referral_code?: string | null;
 };
 
-const PROFILE_TABLE = "users";
+const PROFILE_TABLE = "profiles";
 const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at";
 
 export function isMissingUserColumnError(error: SupabaseProfileError | Error | unknown) {

@@ -42,6 +42,11 @@ export type Occasion = {
   label: string;
   desc: string;
   image: string;
+  slug?: string;
+  title?: string;
+  subtitle?: string;
+  type?: "social" | "corporate" | "custom";
+  active?: boolean;
 };
 
 export type AddOn = {
@@ -108,9 +113,14 @@ export const OCCASIONS: Occasion[] = [
   },
   {
     id: "house-party",
+    slug: "house-party",
     icon: "🏠",
+    title: "House Party",
     label: "House Party",
+    subtitle: "Private celebrations at home",
     desc: "Private celebrations at home",
+    type: "social",
+    active: true,
     image: "https://images.unsplash.com/photo-1604014237800-1c9102c219da?w=700&q=80",
   },
   {
@@ -395,6 +405,56 @@ export const EXPERIENCES: Experience[] = [
       { id: "dj-music", name: "DJ or Music Setup", price: 3000, icon: "🎵" },
       { id: "catering", name: "Catering", price: 4000, icon: "🍽️" },
       { id: "cleanup", name: "Cleaning Support", price: 1500, icon: "✨" },
+    ],
+  },
+  {
+    id: "friends-game-night-at-home",
+    occasionId: "house-party",
+    title: "Friends Game Night at Home",
+    venue: "At your home, Vizag",
+    price: 5999,
+    capacity: 10,
+    rating: 4.8,
+    reviews: 22,
+    description: "A relaxed house-party format for friends gatherings and game nights, with cozy decor, snack/catering coordination, music support, and an optional host or games coordinator to keep the evening moving.",
+    special: ["Friends gathering setup", "Game night friendly", "Host or games coordinator add-on", "Food, music, and cleanup support available"],
+    reviewList: [
+      { name: "Siddharth M", rating: 5, date: "19 Apr 2026", occasion: "Game night · 11 guests", text: "The games host made it feel organized without becoming formal. Snacks and music were timed well." },
+      { name: "Rhea K", rating: 5, date: "1 Apr 2026", occasion: "Friends gathering · 10 guests", text: "Perfect for a low-stress night at home. We got decor, food coordination, and cleanup support in one place." },
+      { name: "Naveen P", rating: 4, date: "13 Mar 2026", occasion: "Home party · 12 guests", text: "The setup felt premium but still personal. Great option when you do not want to book a venue." },
+    ],
+    image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=900&q=80",
+    inclusions: ["Game night layout", "Snack table styling", "Music-ready setup", "Vendor coordination"],
+    addOns: [
+      { id: "games-host", name: "Host or Games Coordinator", price: 2200, icon: "🎤" },
+      { id: "catering", name: "Catering", price: 3500, icon: "🍽️" },
+      { id: "dj-music", name: "DJ or Music Setup", price: 3000, icon: "🎵" },
+      { id: "cleanup", name: "Cleanup Support", price: 1200, icon: "✨" },
+    ],
+  },
+  {
+    id: "villa-poolside-house-party",
+    occasionId: "house-party",
+    title: "Villa & Poolside House Party",
+    venue: "Private villa or poolside home, Vizag",
+    price: 14999,
+    capacity: 18,
+    rating: 4.9,
+    reviews: 18,
+    description: "A premium villa or poolside house party setup for private celebrations, with outdoor styling, catering coordination, photographer options, music setup, and end-to-end vendor execution.",
+    special: ["Villa party support", "Poolside house party setup", "Photographer and music add-ons", "End-to-end vendor coordination"],
+    reviewList: [
+      { name: "Tanvi S", rating: 5, date: "26 Apr 2026", occasion: "Villa party · 20 guests", text: "It looked like a boutique event at home. The lights, food coordination, and photos came together beautifully." },
+      { name: "Armaan D", rating: 5, date: "6 Apr 2026", occasion: "Poolside house party · 18 guests", text: "The poolside styling felt premium and the team handled all vendors without us chasing anyone." },
+      { name: "Leela V", rating: 4, date: "22 Mar 2026", occasion: "Private celebration · 16 guests", text: "Very polished execution for a home celebration. The photographer add-on was worth it." },
+    ],
+    image: "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=900&q=80",
+    inclusions: ["Outdoor decor styling", "Food vendor coordination", "Music-ready layout", "Execution checklist"],
+    addOns: [
+      { id: "photographer", name: "Photographer", price: 1800, icon: "📸" },
+      { id: "premium-catering", name: "Premium Catering", price: 6000, icon: "🍽️" },
+      { id: "dj-music", name: "DJ or Music Setup", price: 3500, icon: "🎵" },
+      { id: "cleanup", name: "Cleanup Support", price: 1800, icon: "✨" },
     ],
   },
   {

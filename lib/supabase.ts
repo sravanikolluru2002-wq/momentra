@@ -84,7 +84,7 @@ export const supabase = createClient(
 
 export async function testSupabaseConnection() {
   try {
-    const { error } = await supabase.from("users").select("*").limit(1);
+    const { error } = await supabase.from("profiles").select("*").limit(1);
 
     if (error) {
       return { error: error.message, ok: false };

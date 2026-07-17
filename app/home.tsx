@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 
-import { DARK, LIGHT } from "@/constants/experiences";
+import { DARK, LIGHT, OCCASIONS as SHARED_OCCASIONS } from "@/constants/experiences";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
 import { openWhatsApp as openMomentraWhatsApp, WhatsAppCategory } from "@/lib/whatsapp";
@@ -39,57 +39,15 @@ type TrendingItem = {
   title: string;
 };
 
-const OCCASIONS: OccasionItem[] = [
-  {
-    id: "birthday",
-    icon: "🎂",
-    label: "Birthday",
-    desc: "Birthdays & milestones",
-    img: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&q=80",
-  },
-  {
-    id: "datenight",
-    icon: "❤️",
-    label: "Date Night",
-    desc: "Romantic evenings",
-    img: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=300&q=80",
-  },
-  {
-    id: "kitty",
-    icon: "👯",
-    label: "Kitty Party",
-    desc: "Girls gatherings",
-    img: "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=300&q=80",
-  },
-  {
-    id: "house-party",
-    icon: "🏠",
-    label: "House Party",
-    desc: "Private celebrations at home",
-    img: "https://images.unsplash.com/photo-1604014237800-1c9102c219da?w=300&q=80",
-  },
-  {
-    id: "party",
-    icon: "🎉",
-    label: "Party",
-    desc: "Group celebrations",
-    img: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=300&q=80",
-  },
-  {
-    id: "corporate",
-    icon: "💼",
-    label: "Corporate",
-    desc: "Work events & dinners",
-    img: "https://images.unsplash.com/photo-1551818255-e6e10975bc17?w=300&q=80",
-  },
-  {
-    id: "other",
-    icon: "✨",
-    label: "Other",
-    desc: "Any special moment",
-    img: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=300&q=80",
-  },
-];
+const OCCASIONS: OccasionItem[] = SHARED_OCCASIONS
+  .filter((occasion) => occasion.active ?? true)
+  .map((occasion) => ({
+    desc: occasion.subtitle ?? occasion.desc,
+    icon: occasion.icon,
+    id: occasion.id,
+    img: occasion.image,
+    label: occasion.title ?? occasion.label,
+  }));
 
 const TRENDING: TrendingItem[] = [
   {
@@ -365,6 +323,62 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <View style={styles.secHeader}>
+            <Text style={[styles.secTitle, { color: T.text }]}>House Parties</Text>
+          </View>
+        </View>
+
+        <View style={styles.houseCard}>
+          <Image
+            source={{ uri: "https://images.unsplash.com/photo-1604014237800-1c9102c219da?w=700&q=85" }}
+            style={styles.houseBg}
+            resizeMode="cover"
+          />
+          <LinearGradient
+            colors={["rgba(201,151,90,0.46)", "rgba(48,24,8,0.62)", "rgba(13,9,5,0.92)"]}
+            end={{ x: 1, y: 1 }}
+            start={{ x: 0, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.houseInner}>
+            <View style={styles.houseBadge}>
+              <Text style={styles.houseBadgeTxt}>🏠 PRIVATE CELEBRATIONS · AT HOME</Text>
+            </View>
+            <Text style={styles.houseTitle}>House Party, Fully Handled.</Text>
+            <Text style={styles.houseSub}>
+              From decor and food to music and cleanup, Momentra coordinates your private celebration end-to-end.
+            </Text>
+
+            <View style={styles.houseEstimate}>
+              <Text style={styles.houseEstimateText}>
+                10 Guests × ₹1,200 per head = <Text style={styles.houseEstimateStrong}>₹12,000 estimated</Text>
+              </Text>
+            </View>
+
+            <View style={styles.kittyActions}>
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/experiences",
+                    params: { category: "house-party" },
+                  } as never)
+                }
+                style={styles.houseBtn}
+              >
+                <Text style={styles.houseBtnTxt}>Plan House Party</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => openWhatsApp("houseParty")}
+                style={styles.kittyWaBtn}
+              >
+                <Text style={styles.kittyWaIcon}>📞</Text>
+                <Text style={styles.kittyWaBtnTxt}>Chat on WhatsApp</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.secHeader}>
             <Text style={[styles.secTitle, { color: T.text }]}>Corporate Moments</Text>
           </View>
         </View>
@@ -621,6 +635,54 @@ const styles = StyleSheet.create({
   },
   kittyWaIcon: { fontSize: 14 },
   kittyWaBtnTxt: { color: "#25D366", fontSize: 11, fontWeight: "600" },
+  houseCard: {
+    borderColor: "rgba(201,151,90,0.26)",
+    borderRadius: 18,
+    borderWidth: 1,
+    marginHorizontal: 16,
+    overflow: "hidden",
+    position: "relative",
+  },
+  houseBg: { ...StyleSheet.absoluteFillObject, opacity: 0.34 },
+  houseInner: { padding: 20 },
+  houseBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(201,151,90,0.18)",
+    borderColor: "rgba(228,185,122,0.32)",
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  houseBadgeTxt: { color: "#E4B97A", fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  houseTitle: { color: "#fff", fontSize: 22, fontWeight: "300", lineHeight: 27, marginBottom: 5 },
+  houseSub: { color: "rgba(242,232,217,0.6)", fontSize: 11, lineHeight: 16, marginBottom: 13 },
+  houseEstimate: {
+    backgroundColor: "rgba(13,9,5,0.52)",
+    borderColor: "rgba(201,151,90,0.22)",
+    borderRadius: 11,
+    borderWidth: 1,
+    marginBottom: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  houseEstimateText: { color: "rgba(242,232,217,0.72)", fontSize: 11, lineHeight: 16 },
+  houseEstimateStrong: { color: "#E4B97A", fontWeight: "800" },
+  houseBtn: {
+    backgroundColor: "#C9975A",
+    borderColor: "rgba(228,185,122,0.34)",
+    borderRadius: 11,
+    borderWidth: 1,
+    elevation: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    shadowColor: "#C9975A",
+    shadowOffset: { height: 5, width: 0 },
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+  },
+  houseBtnTxt: { color: "#1A0E08", fontSize: 11, fontWeight: "800" },
   corporateCard: {
     borderColor: "rgba(201,151,90,0.22)",
     borderRadius: 18,

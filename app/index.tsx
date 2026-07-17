@@ -13,6 +13,7 @@ import {
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1400&q=85";
 const KITTY_IMAGE = "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=900&q=85";
+const HOUSE_PARTY_IMAGE = "https://images.unsplash.com/photo-1604014237800-1c9102c219da?w=900&q=85";
 const CORPORATE_IMAGE = "https://images.unsplash.com/photo-1551818255-e6e10975bc17?w=900&q=85";
 
 const STEPS = [
@@ -68,7 +69,7 @@ function WebHome() {
               onPress={() =>
                 router.push({
                   pathname: "/experiences",
-                  params: { occasionId: "house-party" },
+                  params: { category: "house-party" },
                 } as never)
               }
               style={styles.housePartyCta}
@@ -110,6 +111,24 @@ function WebHome() {
           ]}
           subtitle="A simple flow for hosts who want the celebration without awkward collection follow-ups."
           title="Kitty Circle"
+        />
+        <FeaturePanel
+          cta="Plan House Party"
+          image={HOUSE_PARTY_IMAGE}
+          onPress={() =>
+            router.push({
+              pathname: "/experiences",
+              params: { category: "house-party" },
+            } as never)
+          }
+          points={[
+            "Curated decor, food, music, and entertainment",
+            "Choose a complete package or individual services",
+            "Suitable for birthdays, friends' nights, game nights, and dinners",
+            "Momentra coordinates vendors and execution end-to-end",
+          ]}
+          subtitle="Private celebrations, birthdays, game nights, dinners, and gatherings hosted at home or in a private villa."
+          title="House Parties"
         />
         <FeaturePanel
           cta="Plan Corporate Event"

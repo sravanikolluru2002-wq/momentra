@@ -1,9 +1,21 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import { Image, Platform, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 
 import { CORPORATE_REQUIREMENTS, CORPORATE_VENUES, findCorporateEventType } from "@/constants/corporate";
 import { DARK, LIGHT } from "@/constants/experiences";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
+
+const VENUE_TYPE_CHIPS = [
+  "Cafe",
+  "Banquet Hall",
+  "Rooftop",
+  "Hotel",
+  "Resort",
+  "Private Dining",
+  "Outdoor Lawn",
+  "Beachside",
+];
 
 export default function CorporateVenuesScreen() {
   const router = useRouter();
@@ -26,12 +38,23 @@ export default function CorporateVenuesScreen() {
   const { isDark } = useMomentraTheme();
   const T = isDark ? DARK : LIGHT;
   const eventType = findCorporateEventType(params.eventTypeId);
+  const [selectedVenueType, setSelectedVenueType] = useState<string | null>(null);
   const guests = Number.parseInt(params.guests ?? "20", 10) || 20;
   const requirementLabels = (params.requirements ?? "")
     .split(",")
     .filter(Boolean)
     .map((id) => CORPORATE_REQUIREMENTS.find((item) => item.id === id)?.label)
     .filter(Boolean);
+  const categoryVenues = useMemo(
+    () => CORPORATE_VENUES.filter((venue) => venue.eventTypeId === eventType.id),
+    [eventType.id]
+  );
+  const visibleVenues = useMemo(
+    () => selectedVenueType
+      ? categoryVenues.filter((venue) => venue.venueType === selectedVenueType)
+      : categoryVenues,
+    [categoryVenues, selectedVenueType]
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: T.bg }]}>
@@ -47,13 +70,38 @@ export default function CorporateVenuesScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters} contentContainerStyle={styles.filtersContent}>
-        {["All", "Private Dining", "Banquet", "Rooftop", "Hotel", "GST Ready"].map((filter, index) => (
-          <Text key={filter} style={[styles.filterChip, { backgroundColor: index === 0 ? T.red : T.card, borderColor: index === 0 ? T.red : T.border, color: index === 0 ? "#fff" : T.text2 }]}>{filter}</Text>
-        ))}
+        {VENUE_TYPE_CHIPS.map((filter) => {
+          const active = selectedVenueType === filter;
+
+          return (
+            <Pressable
+              key={filter}
+              onPress={() => setSelectedVenueType((current) => current === filter ? null : filter)}
+              style={[
+                styles.filterChip,
+                {
+                  backgroundColor: active ? T.red : T.card,
+                  borderColor: active ? T.red : T.border,
+                },
+              ]}
+            >
+              <Text style={[styles.filterChipText, { color: active ? "#fff" : T.text2 }]}>{filter}</Text>
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {CORPORATE_VENUES.map((venue) => (
+        {visibleVenues.length === 0 && (
+          <View style={[styles.emptyCard, { backgroundColor: T.card, borderColor: T.border }]}>
+            <Text style={[styles.emptyTitle, { color: T.text }]}>No {selectedVenueType} options yet</Text>
+            <Text style={[styles.emptySub, { color: T.text2 }]}>
+              Try another venue type for {eventType.label}, or clear the selected chip.
+            </Text>
+          </View>
+        )}
+
+        {visibleVenues.map((venue) => (
           <Pressable
             key={venue.id}
             onPress={() =>
@@ -79,6 +127,7 @@ export default function CorporateVenuesScreen() {
               <View style={styles.metaRow}>
                 <Text style={[styles.meta, { borderColor: T.border, color: T.text2 }]}>👥 {venue.capacity}</Text>
                 <Text style={[styles.meta, { borderColor: T.border, color: T.text2 }]}>⏱ {venue.duration}</Text>
+                <Text style={[styles.meta, { borderColor: T.border, color: T.text2 }]}>{venue.venueType}</Text>
                 <Text style={[styles.meta, { borderColor: T.border, color: T.gold }]}>★ {venue.rating} ({venue.reviewCount})</Text>
               </View>
               <View style={styles.amenities}>
@@ -105,9 +154,24 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: "800" },
   sub: { fontSize: 10.5, marginTop: 3 },
   filters: { flexGrow: 0 },
-  filtersContent: { gap: 7, paddingHorizontal: 16, paddingVertical: 11 },
-  filterChip: { borderRadius: 18, borderWidth: 1.5, fontSize: 11, fontWeight: "700", paddingHorizontal: 13, paddingVertical: 7 },
+  filtersContent: {
+    gap: 8,
+    minWidth: Platform.OS === "web" ? "100%" : undefined,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  filterChip: {
+    borderRadius: 18,
+    borderWidth: 1.5,
+    minHeight: 34,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  filterChipText: { fontSize: 11, fontWeight: "800" },
   content: { padding: 16, paddingBottom: 34 },
+  emptyCard: { borderRadius: 17, borderWidth: 1, marginBottom: 13, padding: 18 },
+  emptyTitle: { fontSize: 16, fontWeight: "800", marginBottom: 5 },
+  emptySub: { fontSize: 12, lineHeight: 18 },
   card: { borderRadius: 17, borderWidth: 1, marginBottom: 13, overflow: "hidden" },
   imageWrap: { height: 165, position: "relative" },
   image: { height: "100%", opacity: 0.72, width: "100%" },

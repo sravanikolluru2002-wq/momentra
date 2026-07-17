@@ -28,7 +28,11 @@ import {
   initializeRecaptchaVerifier,
 } from "@/lib/firebase/recaptcha";
 import { normalizeIndianPhoneNumber } from "@/lib/phone";
-import { supabase } from "@/lib/supabase";
+import {
+  ensureCustomerProfile,
+  isMissingUserColumnError,
+  logSupabaseProfileError,
+} from "@/lib/supabase/customer-profile";
 
 const DARK = {
   bg: "#0D0905",
@@ -68,85 +72,6 @@ const LIGHT = {
 
 type AuthMode = "login" | "signup";
 type LoginStep = "phone" | "otp" | "welcome";
-
-const USER_SELECT = "id,firebase_uid,phone_number";
-
-function isMissingColumnError(message: string) {
-  return /column|schema cache|Could not find|does not exist/i.test(message);
-}
-
-type SupabaseUserError = {
-  code?: string | null;
-  details?: string | null;
-  hint?: string | null;
-  message?: string;
-};
-
-function logSupabaseUserError(context: string, error: SupabaseUserError, extra?: Record<string, unknown>) {
-  console.error(`[Momentra auth] ${context}`, {
-    code: error.code ?? null,
-    details: error.details ?? null,
-    hint: error.hint ?? null,
-    message: error.message ?? "Unknown Supabase error",
-    ...extra,
-  });
-}
-
-async function findExistingUser(user: User, phoneNumber: string) {
-  const byFirebase = await supabase
-    .from("users")
-    .select(USER_SELECT)
-    .eq("firebase_uid", user.uid)
-    .limit(1);
-
-  if (byFirebase.error) {
-    logSupabaseUserError("firebase_uid lookup failed", byFirebase.error, {
-      firebase_uid: user.uid,
-      phone_number: phoneNumber,
-    });
-    throw byFirebase.error;
-  }
-
-  const firebaseRow = byFirebase.data?.[0] ?? null;
-
-  if (firebaseRow) return firebaseRow;
-
-  const byPhone = await supabase
-    .from("users")
-    .select(USER_SELECT)
-    .eq("phone_number", phoneNumber)
-    .limit(1);
-
-  if (byPhone.error) {
-    logSupabaseUserError("phone_number lookup failed", byPhone.error, {
-      firebase_uid: user.uid,
-      phone_number: phoneNumber,
-    });
-    throw byPhone.error;
-  }
-
-  return byPhone.data?.[0] ?? null;
-}
-
-async function updateExistingUserLogin(user: User, phoneNumber: string, userId: string) {
-  const { error } = await supabase
-    .from("users")
-    .update({
-      firebase_uid: user.uid,
-      last_login: new Date().toISOString(),
-      phone_number: phoneNumber,
-    })
-    .eq("id", userId);
-
-  if (error) {
-    logSupabaseUserError("last_login update failed", error, {
-      firebase_uid: user.uid,
-      id: userId,
-      phone_number: phoneNumber,
-    });
-    throw error;
-  }
-}
 
 export default function LoginScreen() {
   const { isDark } = useMomentraTheme();
@@ -192,27 +117,17 @@ export default function LoginScreen() {
       setError("");
 
       try {
-        const existingUser = await findExistingUser(user, phoneNumber);
-
-        if (!existingUser) {
-          showError("No account found. Please sign up first.");
-          setStep("phone");
-          return;
-        }
-
-        await updateExistingUserLogin(user, phoneNumber, existingUser.id);
+        await ensureCustomerProfile(user, {}, phoneNumber);
         setMessage("Welcome back");
         setStep("welcome");
         setTimeout(() => router.replace("/profile"), 650);
       } catch (err) {
-        const supabaseError = err as SupabaseUserError;
-        const text = supabaseError?.message ?? (err instanceof Error ? err.message : "Could not check your Momentra account.");
-        logSupabaseUserError("Supabase login lookup failed", supabaseError, {
+        logSupabaseProfileError("login profile ensure failed", err, {
           rawError: err,
         });
 
-        if (isMissingColumnError(text)) {
-          showError("Supabase users table needs phone_number, firebase_uid, and last_login columns.");
+        if (isMissingUserColumnError(err)) {
+          showError("Supabase profiles table needs phone_number, firebase_uid, and last_login columns.");
         } else {
           showError("We could not verify your account. Please try again.");
         }
