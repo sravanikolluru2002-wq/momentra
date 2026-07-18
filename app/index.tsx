@@ -35,6 +35,7 @@ function WebHome() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const compact = width < 820;
+  const phone = width < 560;
 
   return (
     <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false} style={styles.root}>
@@ -45,17 +46,17 @@ function WebHome() {
           style={StyleSheet.absoluteFill}
         />
 
-        <View style={styles.nav}>
-          <Image source={require("../assets/logo.png")} style={styles.logo} resizeMode="contain" />
-          <View style={styles.navActions}>
-            <Pressable onPress={() => router.push("/admin-login" as never)} style={styles.adminLink}>
-              <Text style={styles.adminText}>Admin Login</Text>
+        <View style={[styles.nav, phone && styles.navPhone]}>
+          <Image source={require("../assets/logo.png")} style={[styles.logo, phone && styles.logoPhone]} resizeMode="contain" />
+          <View style={[styles.navActions, phone && styles.navActionsPhone]}>
+            <Pressable onPress={() => router.push("/admin-login" as never)} style={[styles.adminLink, phone && styles.portalLinkPhone]}>
+              <Text style={[styles.adminText, phone && styles.navTextPhone]}>Admin Login</Text>
             </Pressable>
-            <Pressable onPress={() => router.push("/partner-login" as never)} style={styles.partnerLink}>
-              <Text style={styles.partnerText}>Partner Login</Text>
+            <Pressable onPress={() => router.push("/partner-login" as never)} style={[styles.partnerLink, phone && styles.portalLinkPhone]}>
+              <Text style={[styles.partnerText, phone && styles.navTextPhone]}>Partner Login</Text>
             </Pressable>
-            <Pressable onPress={() => router.push("/login" as never)} style={styles.loginLink}>
-              <Text style={styles.loginText}>Login / Continue</Text>
+            <Pressable onPress={() => router.push("/login" as never)} style={[styles.loginLink, phone && styles.loginLinkPhone]}>
+              <Text style={[styles.loginText, phone && styles.navTextPhone]}>Login / Continue</Text>
             </Pressable>
           </View>
         </View>
@@ -244,8 +245,11 @@ const styles = StyleSheet.create({
     width: "100%",
     zIndex: 2,
   },
+  navPhone: { alignItems: "stretch", gap: 14, paddingHorizontal: 16, paddingTop: 18 },
   logo: { height: 72, width: 190 },
+  logoPhone: { alignSelf: "flex-start", height: 50, width: 136 },
   navActions: { alignItems: "center", flexDirection: "row", gap: 10 },
+  navActionsPhone: { alignItems: "stretch", flexWrap: "wrap", gap: 8, width: "100%" },
   loginLink: {
     backgroundColor: "rgba(242,232,217,0.06)",
     borderColor: "rgba(201,151,90,0.24)",
@@ -254,6 +258,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
+  loginLinkPhone: {
+    alignItems: "center",
+    flexBasis: "100%",
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
   partnerLink: {
     backgroundColor: "rgba(192,57,43,0.14)",
     borderColor: "rgba(201,151,90,0.22)",
@@ -261,6 +271,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 10,
+  },
+  portalLinkPhone: {
+    alignItems: "center",
+    flexBasis: "48%",
+    flexGrow: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
   },
   adminLink: {
     backgroundColor: "rgba(168,111,42,0.16)",
@@ -273,6 +290,7 @@ const styles = StyleSheet.create({
   loginText: { color: "#E4B97A", fontSize: 13, fontWeight: "800" },
   adminText: { color: "#F2E8D9", fontSize: 13, fontWeight: "800" },
   partnerText: { color: "#F2E8D9", fontSize: 13, fontWeight: "800" },
+  navTextPhone: { fontSize: 12, textAlign: "center" },
   heroInner: {
     marginHorizontal: "auto",
     maxWidth: 1120,
