@@ -14,6 +14,7 @@ export default function Root({ children }: { children: ReactNode }) {
         <meta content="#0D0905" name="theme-color" />
         <meta content="#0D0905" name="background-color" />
         <meta content="Momentra" name="apple-mobile-web-app-title" />
+        <meta content="yes" name="mobile-web-app-capable" />
         <meta content="yes" name="apple-mobile-web-app-capable" />
         <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" />
         <link href="/manifest.json" rel="manifest" />

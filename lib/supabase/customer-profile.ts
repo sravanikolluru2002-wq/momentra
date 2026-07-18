@@ -38,6 +38,13 @@ type ProfilePayload = {
 const PROFILE_TABLE = "profiles";
 const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login";
 
+function isMissingConflictConstraint(error: SupabaseProfileError) {
+  return (
+    error.code === "42P10" ||
+    /no unique|exclusion constraint|on conflict/i.test(`${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`)
+  );
+}
+
 export function logSupabaseProfileError(context: string, error: SupabaseProfileError | Error | unknown, extra?: Record<string, unknown>) {
   const supabaseError = error as SupabaseProfileError;
 
@@ -63,6 +70,61 @@ export function getFirebaseProfileIdentity(user: FirebaseUser, phoneOverride?: s
     firebaseUid: user.uid,
     phoneNumber,
   };
+}
+
+async function saveCustomerProfileWithoutConflict(payload: Partial<ProfilePayload>, firebaseUid: string, phoneNumber: string) {
+  const byFirebaseUid = await supabase
+    .from(PROFILE_TABLE)
+    .select(PROFILE_SELECT)
+    .eq("firebase_uid", firebaseUid)
+    .limit(1);
+
+  if (byFirebaseUid.error) throw byFirebaseUid.error;
+
+  const existingByUid = byFirebaseUid.data?.[0] as CustomerProfileRow | undefined;
+
+  if (existingByUid?.id) {
+    const { data, error } = await supabase
+      .from(PROFILE_TABLE)
+      .update(payload)
+      .eq("id", existingByUid.id)
+      .select(PROFILE_SELECT)
+      .single();
+
+    if (error) throw error;
+    return data as CustomerProfileRow;
+  }
+
+  const byPhone = await supabase
+    .from(PROFILE_TABLE)
+    .select(PROFILE_SELECT)
+    .eq("phone_number", phoneNumber)
+    .limit(1);
+
+  if (byPhone.error) throw byPhone.error;
+
+  const existingByPhone = byPhone.data?.[0] as CustomerProfileRow | undefined;
+
+  if (existingByPhone?.id) {
+    const { data, error } = await supabase
+      .from(PROFILE_TABLE)
+      .update(payload)
+      .eq("id", existingByPhone.id)
+      .select(PROFILE_SELECT)
+      .single();
+
+    if (error) throw error;
+    return data as CustomerProfileRow;
+  }
+
+  const { data, error } = await supabase
+    .from(PROFILE_TABLE)
+    .insert(payload)
+    .select(PROFILE_SELECT)
+    .single();
+
+  if (error) throw error;
+  return data as CustomerProfileRow;
 }
 
 export async function ensureCustomerProfile(
@@ -98,6 +160,11 @@ export async function ensureCustomerProfile(
       details: error.details,
       hint: error.hint,
     });
+
+    if (isMissingConflictConstraint(error)) {
+      return saveCustomerProfileWithoutConflict(payload, firebaseUid, normalizedPhone);
+    }
+
     throw error;
   }
 
