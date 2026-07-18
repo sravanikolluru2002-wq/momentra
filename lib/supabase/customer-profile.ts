@@ -38,10 +38,11 @@ type ProfilePayload = {
 const PROFILE_TABLE = "profiles";
 const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login";
 
-function isMissingConflictConstraint(error: SupabaseProfileError) {
+function isRecoverableProfileUpsertError(error: SupabaseProfileError) {
   return (
     error.code === "42P10" ||
-    /no unique|exclusion constraint|on conflict/i.test(`${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`)
+    error.code === "23505" ||
+    /duplicate key|no unique|exclusion constraint|on conflict/i.test(`${error.message ?? ""} ${error.details ?? ""} ${error.hint ?? ""}`)
   );
 }
 
@@ -161,7 +162,7 @@ export async function ensureCustomerProfile(
       hint: error.hint,
     });
 
-    if (isMissingConflictConstraint(error)) {
+    if (isRecoverableProfileUpsertError(error)) {
       return saveCustomerProfileWithoutConflict(payload, firebaseUid, normalizedPhone);
     }
 
