@@ -1,6 +1,20 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
+import {
+  BadgeCheck,
+  Bell,
+  BriefcaseBusiness,
+  Camera,
+  HeartHandshake,
+  House,
+  MessageCircle,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  UsersRound,
+  type LucideIcon,
+} from "lucide-react-native";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Image,
@@ -61,17 +75,23 @@ const TRENDING: TrendingItem[] = [
   },
 ];
 
-const PROMISES = [
-  { icon: "📸", text: "Setup photo sent 2 hours before your moment" },
-  { icon: "✓", text: "Availability confirmed before we confirm to you" },
-  { icon: "🎯", text: "Live support during every Momentra experience" },
-  { icon: "💯", text: "Full refund if we can't deliver what we promised" },
+export default function HomeScreen() {
+  return <MobileHomeScreen />;
+}
+
+const PROMISE_ITEMS: { icon: LucideIcon; text: string }[] = [
+  { icon: Camera, text: "Setup photo sent 2 hours before your moment" },
+  { icon: BadgeCheck, text: "Availability confirmed before we confirm to you" },
+  { icon: HeartHandshake, text: "Live support during every Momentra experience" },
+  { icon: ShieldCheck, text: "Full refund if we can't deliver what we promised" },
 ];
 
-export default function HomeScreen() {
+function MobileHomeScreen() {
   const router = useRouter();
   const { isDark } = useMomentraTheme();
-  const { width } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
+  const viewportWidth = useViewportWidth(windowWidth);
+  const width = Math.min(windowWidth, viewportWidth);
   const T = isDark ? DARK : LIGHT;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const occasionColumns = width < 430 ? 2 : width < 900 ? 3 : 4;
@@ -123,6 +143,7 @@ export default function HomeScreen() {
 
   function OccasionCard({ item }: { item: OccasionItem }) {
     const scale = useRef(new Animated.Value(1)).current;
+    const Icon = getOccasionIcon(item.id);
 
     return (
       <Pressable
@@ -140,7 +161,7 @@ export default function HomeScreen() {
           />
           <View style={styles.occContent}>
             <View style={styles.occIconWrap}>
-              <Text style={styles.occIcon}>{item.icon}</Text>
+              <Icon color="#F2E8D9" size={17} strokeWidth={2.1} />
             </View>
             <Text style={styles.occLabel}>{item.label}</Text>
             <Text style={styles.occDesc}>{item.desc}</Text>
@@ -205,14 +226,14 @@ export default function HomeScreen() {
           <View style={styles.heroHeader}>
             <View style={styles.headerSpacer} />
             <View style={styles.logoWrap}>
-              <Image source={require("../assets/logo.png")} style={styles.logoImg} resizeMode="contain" />
+              <Image source={require("../assets/logo-wide.png")} style={styles.logoImg} resizeMode="contain" />
             </View>
             <View style={styles.headerActions}>
               <Pressable style={styles.hdrBtn}>
-                <Text style={styles.headerIcon}>🔍</Text>
+                <Search color={T.gold} size={16} strokeWidth={2.2} />
               </Pressable>
               <Pressable style={styles.hdrBtn}>
-                <Text style={styles.headerIcon}>🔔</Text>
+                <Bell color={T.gold} size={16} strokeWidth={2.2} />
               </Pressable>
             </View>
           </View>
@@ -273,7 +294,8 @@ export default function HomeScreen() {
           />
           <View style={styles.kittyInner}>
             <View style={styles.kittyBadge}>
-              <Text style={[styles.kittyBadgeTxt, { color: T.gold }]}>👯 Most Popular · Groups</Text>
+              <UsersRound color={T.gold} size={13} strokeWidth={2.2} />
+              <Text style={[styles.kittyBadgeTxt, { color: T.gold }]}>Most Popular · Groups</Text>
             </View>
             <Text style={styles.kittyTitle}>
               Your Circle.{"\n"}
@@ -314,7 +336,7 @@ export default function HomeScreen() {
                 onPress={() => openWhatsApp("kitty")}
                 style={styles.kittyWaBtn}
               >
-                <Text style={styles.kittyWaIcon}>📞</Text>
+                <MessageCircle color="#25D366" size={15} strokeWidth={2.2} />
                 <Text style={styles.kittyWaBtnTxt}>Chat on WhatsApp</Text>
               </Pressable>
             </View>
@@ -341,7 +363,8 @@ export default function HomeScreen() {
           />
           <View style={styles.houseInner}>
             <View style={styles.houseBadge}>
-              <Text style={styles.houseBadgeTxt}>🏠 PRIVATE CELEBRATIONS · AT HOME</Text>
+              <House color="#E4B97A" size={13} strokeWidth={2.2} />
+              <Text style={styles.houseBadgeTxt}>PRIVATE CELEBRATIONS · AT HOME</Text>
             </View>
             <Text style={styles.houseTitle}>House Party, Fully Handled.</Text>
             <Text style={styles.houseSub}>
@@ -370,7 +393,7 @@ export default function HomeScreen() {
                 onPress={() => openWhatsApp("houseParty")}
                 style={styles.kittyWaBtn}
               >
-                <Text style={styles.kittyWaIcon}>📞</Text>
+                <MessageCircle color="#25D366" size={15} strokeWidth={2.2} />
                 <Text style={styles.kittyWaBtnTxt}>Chat on WhatsApp</Text>
               </Pressable>
             </View>
@@ -397,7 +420,8 @@ export default function HomeScreen() {
           />
           <View style={styles.corporateInner}>
             <View style={styles.corporateBadge}>
-              <Text style={styles.corporateBadgeTxt}>💼 GST READY · TEAM EVENTS</Text>
+              <BriefcaseBusiness color="#4BAFD6" size={13} strokeWidth={2.2} />
+              <Text style={styles.corporateBadgeTxt}>GST READY · TEAM EVENTS</Text>
             </View>
             <Text style={styles.corporateTitle}>Corporate Moments</Text>
             <Text style={styles.corporateSub}>Team dinners, client hosting, offsites & GST-ready events</Text>
@@ -430,7 +454,7 @@ export default function HomeScreen() {
             style={styles.waStrip}
           >
             <View style={styles.waIcon}>
-              <Text style={styles.waIconText}>📞</Text>
+              <MessageCircle color="#25D366" size={18} strokeWidth={2.2} />
             </View>
             <View style={styles.waCopy}>
               <Text style={[styles.waTitle, { color: T.text }]}>Not sure what to book?</Text>
@@ -445,15 +469,18 @@ export default function HomeScreen() {
         <View style={[styles.section, styles.trustSection]}>
           <View style={[styles.trustCard, { backgroundColor: T.card, borderColor: T.border }]}>
             <Text style={[styles.trustTitle, { color: T.text3 }]}>THE MOMENTRA PROMISE</Text>
-            {PROMISES.map((item, index) => (
+            {PROMISE_ITEMS.map((item, index) => {
+              const PromiseIcon = item.icon;
+              return (
               <View
                 key={item.text}
                 style={[styles.trustRow, index > 0 && { borderTopColor: T.border, borderTopWidth: 1 }]}
               >
-                <Text style={styles.trustIcon}>{item.icon}</Text>
+                <PromiseIcon color={T.gold} size={16} strokeWidth={2.1} />
                 <Text style={[styles.trustTxt, { color: T.text2 }]}>{item.text}</Text>
               </View>
-            ))}
+              );
+            })}
           </View>
         </View>
       </ScrollView>
@@ -463,9 +490,33 @@ export default function HomeScreen() {
   );
 }
 
+function useViewportWidth(fallback: number) {
+  const [viewportWidth, setViewportWidth] = useState(fallback);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+
+    const updateWidth = () => setViewportWidth(window.innerWidth);
+    updateWidth();
+    window.addEventListener("resize", updateWidth);
+
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
+
+  return viewportWidth;
+}
+
+function getOccasionIcon(id: string): LucideIcon {
+  if (id === "corporate") return BriefcaseBusiness;
+  if (id === "house-party") return House;
+  if (id === "kitty" || id === "bachelorette" || id === "bridal-shower") return UsersRound;
+  if (id === "datenight" || id === "anniversary") return HeartHandshake;
+  return Sparkles;
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, paddingTop: Platform.OS === "ios" ? 52 : 32 },
-  scrollContent: { paddingBottom: 118 },
+  scrollContent: { paddingBottom: 154 },
   hero: { height: 370, overflow: "hidden", position: "relative" },
   heroGlow: {
     alignSelf: "center",
@@ -488,10 +539,10 @@ const styles = StyleSheet.create({
     top: Platform.OS === "ios" ? 0 : -20,
     zIndex: 10,
   },
-  headerSpacer: { width: 76 },
-  logoWrap: { alignItems: "center", flexShrink: 0 },
-  logoImg: { alignSelf: "center", height: 95, width: 240 },
-  headerActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end", paddingTop: 4, width: 76 },
+  headerSpacer: { width: 82 },
+  logoWrap: { alignItems: "center", left: 92, position: "absolute", right: 92 },
+  logoImg: { alignSelf: "center", height: 126, width: 296 },
+  headerActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end", paddingTop: 4, width: 82 },
   hdrBtn: {
     alignItems: "center",
     backgroundColor: "rgba(13,9,5,0.55)",
@@ -516,7 +567,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     position: "absolute",
     right: 18,
-    top: 136,
+    top: 154,
     zIndex: 12,
   },
   foundingDot: {
@@ -582,11 +633,14 @@ const styles = StyleSheet.create({
   kittyBg: { ...StyleSheet.absoluteFillObject, opacity: 0.28 },
   kittyInner: { padding: 20 },
   kittyBadge: {
+    alignItems: "center",
     alignSelf: "flex-start",
     backgroundColor: "rgba(201,151,90,0.18)",
     borderColor: "rgba(201,151,90,0.3)",
     borderRadius: 8,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
     marginBottom: 9,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -646,11 +700,14 @@ const styles = StyleSheet.create({
   houseBg: { ...StyleSheet.absoluteFillObject, opacity: 0.34 },
   houseInner: { padding: 20 },
   houseBadge: {
+    alignItems: "center",
     alignSelf: "flex-start",
     backgroundColor: "rgba(201,151,90,0.18)",
     borderColor: "rgba(228,185,122,0.32)",
     borderRadius: 8,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
     marginBottom: 9,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -694,11 +751,14 @@ const styles = StyleSheet.create({
   corporateBg: { ...StyleSheet.absoluteFillObject, opacity: 0.36 },
   corporateInner: { padding: 20 },
   corporateBadge: {
+    alignItems: "center",
     alignSelf: "flex-start",
     backgroundColor: "rgba(46,134,171,0.18)",
     borderColor: "rgba(46,134,171,0.3)",
     borderRadius: 8,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
     marginBottom: 9,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -747,7 +807,7 @@ const styles = StyleSheet.create({
   waTitle: { fontSize: 13, fontWeight: "600", marginBottom: 2 },
   waSub: { fontSize: 10.5, lineHeight: 15 },
   waArrow: { color: "rgba(37,211,102,0.6)", fontSize: 18 },
-  trustSection: { paddingBottom: 100, paddingTop: 8 },
+  trustSection: { paddingBottom: 132, paddingTop: 8 },
   trustCard: { borderRadius: 15, borderWidth: 1, overflow: "hidden" },
   trustTitle: { fontSize: 9, fontWeight: "500", letterSpacing: 2.5, padding: 13, paddingBottom: 8, textTransform: "uppercase" },
   trustRow: { alignItems: "center", flexDirection: "row", gap: 11, paddingHorizontal: 13, paddingVertical: 10 },

@@ -287,8 +287,8 @@ function TrustChip({ text }: { text: string }) {
 const styles = StyleSheet.create({
   root: { flex: 1, paddingTop: Platform.OS === "ios" ? 52 : 32 },
   headerLite: { alignItems: "center", flexDirection: "row", gap: 8, paddingHorizontal: 18, paddingTop: 10 },
-  miniLogo: { alignItems: "center", backgroundColor: "rgba(192,57,43,0.15)", borderColor: "rgba(192,57,43,0.25)", borderRadius: 12, borderWidth: 1, height: 24, justifyContent: "center", width: 24 },
-  miniLogoTxt: { color: "#F2E8D9", fontSize: 11, fontWeight: "800" },
+  miniLogo: { alignItems: "center", backgroundColor: "rgba(192,57,43,0.15)", borderColor: "rgba(192,57,43,0.25)", borderRadius: 15, borderWidth: 1, height: 32, justifyContent: "center", width: 32 },
+  miniLogoTxt: { color: "#F2E8D9", fontSize: 14, fontWeight: "800" },
   headerText: { fontSize: 11 },
   content: { padding: 18, paddingBottom: 128 },
   inviteCard: { borderRadius: 20, borderWidth: 1, overflow: "hidden", position: "relative" },

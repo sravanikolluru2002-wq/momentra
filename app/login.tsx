@@ -381,7 +381,7 @@ export default function LoginScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.brandBlock}>
-            <Image resizeMode="contain" source={require("../assets/logo.png")} style={styles.logoImage} />
+            <Image resizeMode="contain" source={require("../assets/logo-wide.png")} style={styles.logoImage} />
             <Text style={[styles.phonetic, { color: theme.gold }]}>{"/'moh-men-truh/"}</Text>
             <Text style={[styles.tagline, { color: theme.text }]}>
               Curated celebration venues, experiences, and details in a single beautiful booking flow.
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 34 },
   brandBlock: { alignItems: "center", marginBottom: 30 },
-  logoImage: { height: 128, marginBottom: 10, width: 306 },
+  logoImage: { height: 118, marginBottom: 10, width: 278 },
   phonetic: { fontSize: 13, fontWeight: "600", marginBottom: 12, textAlign: "center" },
   tagline: { alignSelf: "center", fontSize: 16, lineHeight: 24, maxWidth: 330, textAlign: "center" },
   panel: { borderRadius: 28, borderWidth: 1, padding: 24, shadowOffset: { height: 18, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28, width: "100%" },

@@ -10,7 +10,7 @@ import { MomentraThemeProvider } from '@/contexts/momentra-theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
-  initialRouteName: 'login',
+  initialRouteName: 'index',
 };
 
 export default function RootLayout() {

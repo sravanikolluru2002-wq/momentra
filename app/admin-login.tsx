@@ -120,7 +120,7 @@ export default function AdminLoginScreen() {
           </View>
 
           <View style={styles.brandBlock}>
-            <Image resizeMode="contain" source={require("../assets/logo.png")} style={styles.logoImage} />
+            <Image resizeMode="contain" source={require("../assets/logo-wide.png")} style={styles.logoImage} />
             <Text style={[styles.phonetic, { color: theme.gold }]}>ADMIN ACCESS</Text>
             <Text style={[styles.tagline, { color: theme.text }]}>
               This admin login now persists a real admin profile before opening the live operations dashboard.
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   backPill: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 9 },
   backPillText: { fontSize: 12, fontWeight: "800" },
   brandBlock: { alignItems: "center", marginBottom: 30 },
-  logoImage: { height: 128, marginBottom: 10, width: 306 },
+  logoImage: { height: 118, marginBottom: 10, width: 278 },
   phonetic: { fontSize: 13, fontWeight: "800", letterSpacing: 2.2, marginBottom: 12, textAlign: "center" },
   tagline: { alignSelf: "center", fontSize: 16, lineHeight: 24, maxWidth: 430, textAlign: "center" },
   panel: { borderRadius: 28, borderWidth: 1, padding: 24, shadowOffset: { height: 18, width: 0 }, shadowOpacity: 0.18, shadowRadius: 28, width: "100%" },

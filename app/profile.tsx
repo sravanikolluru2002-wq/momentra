@@ -1248,7 +1248,7 @@ function createStyles(T: Palette) {
     screenBody: {
       alignSelf: "center",
       maxWidth: 1040,
-      paddingBottom: 148,
+      paddingBottom: Platform.OS === "web" ? 184 : 156,
       paddingHorizontal: Platform.OS === "web" ? 24 : 0,
       width: "100%",
     },

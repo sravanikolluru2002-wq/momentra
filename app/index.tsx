@@ -33,7 +33,11 @@ export default function IndexScreen() {
 
 function WebHome() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const { width: measuredWidth } = useWindowDimensions();
+  const width =
+    Platform.OS === "web" && typeof window !== "undefined"
+      ? window.innerWidth
+      : Math.max(measuredWidth, 1200);
   const compact = width < 820;
   const phone = width < 560;
 
@@ -47,7 +51,7 @@ function WebHome() {
         />
 
         <View style={[styles.nav, phone && styles.navPhone]}>
-          <Image source={require("../assets/logo.png")} style={[styles.logo, phone && styles.logoPhone]} resizeMode="contain" />
+          <Image source={require("../assets/logo-wide.png")} style={[styles.logo, phone && styles.logoPhone]} resizeMode="contain" />
           <View style={[styles.navActions, phone && styles.navActionsPhone]}>
             <Pressable onPress={() => router.push("/admin-login" as never)} style={[styles.adminLink, phone && styles.portalLinkPhone]}>
               <Text style={[styles.adminText, phone && styles.navTextPhone]}>Admin Login</Text>
@@ -61,17 +65,17 @@ function WebHome() {
           </View>
         </View>
 
-        <View style={[styles.heroInner, compact && styles.heroInnerCompact]}>
+        <View style={[styles.heroInner, compact && styles.heroInnerCompact, phone && styles.heroInnerPhone]}>
           <Text style={styles.brand}>MOMENTRA</Text>
-          <Text style={styles.heroTitle}>
+          <Text style={[styles.heroTitle, compact && styles.heroTitleCompact, phone && styles.heroTitlePhone]}>
             Every celebration starts with the right moment.
           </Text>
-          <Text style={styles.heroSub}>
+          <Text style={[styles.heroSub, phone && styles.heroSubPhone]}>
             From social gatherings to corporate events, Momentra helps you discover venues,
             organize guests, and bring experiences together effortlessly. Momentra coordinates the experience end-to-end.
           </Text>
           <View style={[styles.ctaRow, compact && styles.ctaColumn]}>
-            <Pressable onPress={() => router.push("/kitty" as never)} style={styles.primaryCta}>
+            <Pressable onPress={() => router.push("/kitty" as never)} style={[styles.primaryCta, phone && styles.fullWidthCta]}>
               <Text style={styles.primaryCtaText}>Plan Kitty Party</Text>
             </Pressable>
             <Pressable
@@ -81,14 +85,14 @@ function WebHome() {
                   params: { category: "house-party" },
                 } as never)
               }
-              style={styles.housePartyCta}
+              style={[styles.housePartyCta, phone && styles.fullWidthCta]}
             >
               <Text style={styles.primaryCtaText}>Plan House Party</Text>
             </Pressable>
-            <Pressable onPress={() => router.push("/corporate" as never)} style={styles.primaryCtaAlt}>
+            <Pressable onPress={() => router.push("/corporate" as never)} style={[styles.primaryCtaAlt, phone && styles.fullWidthCta]}>
               <Text style={styles.primaryCtaText}>Plan Corporate Event</Text>
             </Pressable>
-            <Pressable onPress={() => router.push("/explore" as never)} style={styles.secondaryCta}>
+            <Pressable onPress={() => router.push("/explore" as never)} style={[styles.secondaryCta, phone && styles.fullWidthCta]}>
               <Text style={styles.secondaryCtaText}>Browse Experiences</Text>
             </Pressable>
           </View>
@@ -107,7 +111,7 @@ function WebHome() {
         </View>
       </Section>
 
-      <View style={[styles.featureGrid, compact && styles.stack]}>
+      <View style={[styles.featureGrid, compact && styles.stack, phone && styles.featureGridPhone]}>
         <FeaturePanel
           cta="Plan Kitty Party"
           image={KITTY_IMAGE}
@@ -154,7 +158,7 @@ function WebHome() {
         />
       </View>
 
-      <View style={styles.browseBand}>
+      <View style={[styles.browseBand, phone && styles.browseBandPhone]}>
         <View style={styles.browseCopy}>
           <Text style={styles.browseTitle}>Not sure what to plan yet?</Text>
           <Text style={styles.browseSub}>
@@ -162,7 +166,7 @@ function WebHome() {
             parties, kitty gatherings, and corporate moments.
           </Text>
         </View>
-        <Pressable onPress={() => router.push("/explore" as never)} style={styles.primaryCta}>
+        <Pressable onPress={() => router.push("/explore" as never)} style={[styles.primaryCta, phone && styles.fullWidthCta]}>
           <Text style={styles.primaryCtaText}>Browse Experiences</Text>
         </Pressable>
       </View>
@@ -230,8 +234,8 @@ function FeaturePanel({
 }
 
 const styles = StyleSheet.create({
-  root: { backgroundColor: "#050302", flex: 1 },
-  page: { backgroundColor: "#050302", paddingBottom: 56 },
+  root: { backgroundColor: "#050302", flex: 1, maxWidth: "100vw" as never, overflowX: "hidden" as never },
+  page: { backgroundColor: "#050302", maxWidth: "100vw" as never, overflowX: "hidden" as never, paddingBottom: 56 },
   hero: { minHeight: 620, overflow: "hidden", position: "relative" },
   heroImage: { ...StyleSheet.absoluteFillObject, opacity: 0.38 },
   nav: {
@@ -245,9 +249,9 @@ const styles = StyleSheet.create({
     width: "100%",
     zIndex: 2,
   },
-  navPhone: { alignItems: "stretch", gap: 14, paddingHorizontal: 16, paddingTop: 18 },
-  logo: { height: 72, width: 190 },
-  logoPhone: { alignSelf: "flex-start", height: 50, width: 136 },
+  navPhone: { alignItems: "stretch", flexDirection: "column", gap: 14, paddingHorizontal: 16, paddingTop: 18 },
+  logo: { height: 82, width: 194 },
+  logoPhone: { alignSelf: "flex-start", height: 64, width: 150 },
   navActions: { alignItems: "center", flexDirection: "row", gap: 10 },
   navActionsPhone: { alignItems: "stretch", flexWrap: "wrap", gap: 8, width: "100%" },
   loginLink: {
@@ -274,7 +278,7 @@ const styles = StyleSheet.create({
   },
   portalLinkPhone: {
     alignItems: "center",
-    flexBasis: "48%",
+    flexBasis: 0,
     flexGrow: 1,
     paddingHorizontal: 10,
     paddingVertical: 11,
@@ -300,9 +304,13 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   heroInnerCompact: { paddingTop: 54 },
+  heroInnerPhone: { paddingHorizontal: 16, paddingTop: 46 },
   brand: { color: "#E4B97A", fontSize: 18, fontWeight: "800", letterSpacing: 4, marginBottom: 14, textTransform: "uppercase" },
   heroTitle: { color: "#F2E8D9", fontSize: 60, fontWeight: "300", letterSpacing: 0, lineHeight: 68, maxWidth: 900 },
+  heroTitleCompact: { fontSize: 46, lineHeight: 54 },
+  heroTitlePhone: { fontSize: 38, lineHeight: 46 },
   heroSub: { color: "rgba(242,232,217,0.68)", fontSize: 18, lineHeight: 30, marginTop: 18, maxWidth: 680 },
+  heroSubPhone: { fontSize: 15, lineHeight: 24 },
   ctaRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 30 },
   ctaColumn: { flexDirection: "column" },
   primaryCta: {
@@ -332,6 +340,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
   primaryCtaText: { color: "#fff", fontSize: 14, fontWeight: "900" },
+  fullWidthCta: { width: "100%" },
   secondaryCta: {
     alignItems: "center",
     backgroundColor: "rgba(242,232,217,0.06)",
@@ -352,6 +361,7 @@ const styles = StyleSheet.create({
   stepTitle: { color: "#F2E8D9", fontSize: 17, fontWeight: "800", marginBottom: 8 },
   stepText: { color: "rgba(242,232,217,0.56)", fontSize: 13, lineHeight: 21 },
   featureGrid: { flexDirection: "row", gap: 18, marginHorizontal: "auto", maxWidth: 1120, paddingHorizontal: 22, width: "100%" },
+  featureGridPhone: { paddingHorizontal: 16 },
   featurePanel: { borderColor: "rgba(201,151,90,0.2)", borderRadius: 24, borderWidth: 1, flex: 1, minHeight: 470, overflow: "hidden", position: "relative" },
   featureImage: { height: "100%", opacity: 0.56, position: "absolute", width: "100%" },
   featureContent: { bottom: 0, left: 0, padding: 28, position: "absolute", right: 0 },
@@ -378,6 +388,7 @@ const styles = StyleSheet.create({
     padding: 26,
     width: "calc(100% - 44px)" as never,
   },
+  browseBandPhone: { alignItems: "stretch", flexDirection: "column", marginHorizontal: 16, width: "auto" as never },
   browseCopy: { flex: 1 },
   browseTitle: { color: "#F2E8D9", fontSize: 25, fontWeight: "400", marginBottom: 7 },
   browseSub: { color: "rgba(242,232,217,0.6)", fontSize: 14, lineHeight: 23, maxWidth: 660 },

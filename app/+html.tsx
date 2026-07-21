@@ -13,6 +13,9 @@ export default function Root({ children }: { children: ReactNode }) {
         />
         <meta content="#0D0905" name="theme-color" />
         <meta content="#0D0905" name="background-color" />
+        <meta content="no-cache, no-store, must-revalidate" httpEquiv="Cache-Control" />
+        <meta content="no-cache" httpEquiv="Pragma" />
+        <meta content="0" httpEquiv="Expires" />
         <meta content="Momentra" name="apple-mobile-web-app-title" />
         <meta content="yes" name="mobile-web-app-capable" />
         <meta content="yes" name="apple-mobile-web-app-capable" />
@@ -27,6 +30,7 @@ export default function Root({ children }: { children: ReactNode }) {
                 height: 100%;
                 min-height: 100%;
                 width: 100%;
+                max-width: 100vw;
                 margin: 0;
                 background: #050302;
                 overflow-x: hidden;
@@ -37,6 +41,9 @@ export default function Root({ children }: { children: ReactNode }) {
               }
               * {
                 box-sizing: border-box;
+              }
+              img, video, canvas {
+                max-width: 100%;
               }
             `,
           }}

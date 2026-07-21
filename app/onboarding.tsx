@@ -206,7 +206,7 @@ export default function PersonaOnboardingScreen() {
         style={StyleSheet.absoluteFill}
       />
       <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Image resizeMode="contain" source={require("../assets/logo.png")} style={s.logo} />
+        <Image resizeMode="contain" source={require("../assets/logo-wide.png")} style={s.logo} />
         <Text style={[s.eyebrow, { color: T.gold }]}>MOMENTRA SIGN UP</Text>
         <Text style={[s.title, { color: T.text }]}>Complete your Momentra profile</Text>
         <Text style={[s.subtitle, { color: T.text2 }]}>
@@ -296,7 +296,7 @@ export default function PersonaOnboardingScreen() {
 const s = StyleSheet.create({
   root: { flex: 1 },
   body: { paddingBottom: 42, paddingHorizontal: 22, paddingTop: Platform.OS === "ios" ? 58 : 36 },
-  logo: { alignSelf: "center", height: 86, marginBottom: 10, width: 220 },
+  logo: { alignSelf: "center", height: 100, marginBottom: 10, width: 236 },
   eyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 2.4, marginBottom: 8, textAlign: "center" },
   title: { fontSize: 30, fontWeight: "700", lineHeight: 36, textAlign: "center" },
   subtitle: { alignSelf: "center", fontSize: 13, lineHeight: 21, marginBottom: 24, marginTop: 8, maxWidth: 420, textAlign: "center" },

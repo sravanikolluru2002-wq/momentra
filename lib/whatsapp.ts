@@ -33,6 +33,16 @@ export function openWhatsApp(category: WhatsAppCategory, errorLabel = "WHATSAPP 
   });
 }
 
+export function getWhatsAppMessageUrl(message: string) {
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+}
+
+export function openWhatsAppMessage(message: string, errorLabel = "WHATSAPP OPEN ERROR") {
+  Linking.openURL(getWhatsAppMessageUrl(message)).catch((error) => {
+    console.error(errorLabel, error);
+  });
+}
+
 export function whatsappCategoryFromOccasion(occasionId?: string): WhatsAppCategory {
   switch (occasionId) {
     case "birthday":

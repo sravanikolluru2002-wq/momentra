@@ -47,6 +47,7 @@ export function LuxuryBottomNav({ active }: LuxuryBottomNavProps) {
           ? {
               bottom: 22,
               left: Math.max((width - webWidth) / 2, 24),
+              position: "fixed" as never,
               right: undefined,
               width: webWidth,
             }
@@ -136,7 +137,7 @@ const styles = StyleSheet.create({
     left: 14,
     position: "absolute",
     right: 14,
-    zIndex: 80,
+    zIndex: 1000,
   },
   bar: {
     alignItems: "center",

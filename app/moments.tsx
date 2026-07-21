@@ -580,7 +580,7 @@ const s = StyleSheet.create({
   tabsWrap: { borderRadius: 14, borderWidth: 1, flexDirection: "row", gap: 3, marginBottom: 0, marginHorizontal: 20, padding: 4 },
   tab: { alignItems: "center", borderRadius: 11, elevation: 4, flex: 1, justifyContent: "center", paddingVertical: 9, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 8 },
   tabTxt: { fontSize: 12 },
-  contentContainer: { paddingBottom: Platform.OS === "ios" ? 118 : 102, paddingHorizontal: 18, paddingTop: 14 },
+  contentContainer: { paddingBottom: Platform.OS === "web" ? 168 : Platform.OS === "ios" ? 148 : 132, paddingHorizontal: 18, paddingTop: 14 },
   secLbl: { alignItems: "center", flexDirection: "row", gap: 10, marginBottom: 12 },
   secLine: { flex: 1, height: 1 },
   secLblTxt: { fontSize: 9, fontWeight: "500", letterSpacing: 2, textTransform: "uppercase" },

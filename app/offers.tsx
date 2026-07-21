@@ -398,7 +398,7 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: "400", lineHeight: 32 },
   headerSub: { fontSize: 11, marginTop: 3 },
   bellBtn: { alignItems: "center", borderRadius: 18, borderWidth: 1, height: 36, justifyContent: "center", width: 36 },
-  scrollContent: { paddingBottom: 118 },
+  scrollContent: { paddingBottom: 154 },
   section: { marginBottom: 20, paddingHorizontal: 18 },
   tightSection: { marginBottom: 4 },
   secRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
