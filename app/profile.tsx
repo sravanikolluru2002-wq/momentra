@@ -30,6 +30,9 @@ type ScreenId =
   | "edit"
   | "addresses"
   | "payments"
+  | "credits"
+  | "groups"
+  | "createPlan"
   | "notifications"
   | "city"
   | "bookings"
@@ -43,6 +46,39 @@ type ScreenId =
 type Palette = typeof DARK;
 
 type CustomerProfile = CustomerProfileRow;
+
+type WalletTransactionType = "referral" | "refund" | "promo" | "redemption" | "manual_credit";
+type WalletTransaction = {
+  amount: number;
+  date: string;
+  id: string;
+  note: string;
+  type: WalletTransactionType;
+};
+type MockWallet = {
+  available: number;
+  earned: number;
+  expiring: number;
+  expiringOn: string;
+  transactions: WalletTransaction[];
+  used: number;
+};
+type GroupMember = {
+  id: string;
+  name: string;
+  phone: string;
+  status: "saved" | "invited" | "paid" | "pending";
+};
+type SharedPlan = {
+  id: string;
+  eventName: string;
+  totalAmount: number;
+  memberIds: string[];
+  paidMemberIds: string[];
+  splitType: "equal" | "custom";
+  threshold: number;
+  status: "collecting" | "confirmed" | "completed" | "threshold_pending";
+};
 
 const DARK = {
   bg: "#0d0905",
@@ -204,6 +240,76 @@ const faqs = [
   ["Can I bring my own decorator?", "Each venue listing shows whether external decoration is allowed under Amenities & Permissions."],
 ];
 
+const mockWallet: MockWallet = {
+  available: 1250,
+  earned: 3000,
+  expiring: 350,
+  expiringOn: "31 Dec 2026",
+  used: 1750,
+  transactions: [
+    { id: "txn-referral", amount: 500, date: "18 Jul 2026", note: "Referral reward for inviting Ananya", type: "referral" },
+    { id: "txn-refund", amount: 750, date: "12 Jul 2026", note: "Refund credit from rescheduled kitty brunch", type: "refund" },
+    { id: "txn-promo", amount: 250, date: "01 Jul 2026", note: "Founding Moment promo credit", type: "promo" },
+    { id: "txn-redeem", amount: -800, date: "24 Jun 2026", note: "Used at checkout for birthday setup", type: "redemption" },
+    { id: "txn-manual", amount: 550, date: "16 Jun 2026", note: "Manual service recovery credit", type: "manual_credit" },
+  ],
+};
+
+const emptyMockWallet: MockWallet = {
+  available: 0,
+  earned: 0,
+  expiring: 0,
+  expiringOn: "No expiry",
+  used: 0,
+  transactions: [],
+};
+
+const mockMembers: GroupMember[] = [
+  { id: "m-priya", name: "Priya Mehta", phone: "98765 43210", status: "paid" },
+  { id: "m-rekha", name: "Rekha Sharma", phone: "91234 56789", status: "pending" },
+  { id: "m-anjali", name: "Anjali Nair", phone: "99887 76655", status: "invited" },
+  { id: "m-kavitha", name: "Kavitha Reddy", phone: "90099 88776", status: "saved" },
+  { id: "m-deepa", name: "Deepa Krishnan", phone: "99001 22334", status: "pending" },
+];
+
+const mockSharedPlans: SharedPlan[] = [
+  {
+    id: "plan-kitty",
+    eventName: "Sunday Kitty Brunch",
+    memberIds: ["m-priya", "m-rekha", "m-anjali", "m-kavitha", "m-deepa"],
+    paidMemberIds: ["m-priya"],
+    splitType: "equal",
+    status: "threshold_pending",
+    threshold: 3,
+    totalAmount: 15000,
+  },
+  {
+    id: "plan-birthday",
+    eventName: "Birthday Terrace Setup",
+    memberIds: ["m-priya", "m-rekha", "m-anjali"],
+    paidMemberIds: ["m-priya", "m-rekha", "m-anjali"],
+    splitType: "equal",
+    status: "completed",
+    threshold: 2,
+    totalAmount: 9000,
+  },
+  {
+    id: "plan-cocktail",
+    eventName: "Cocktail Party Advance",
+    memberIds: ["m-priya", "m-rekha", "m-anjali", "m-kavitha"],
+    paidMemberIds: ["m-priya", "m-rekha"],
+    splitType: "custom",
+    status: "collecting",
+    threshold: 2,
+    totalAmount: 22000,
+  },
+];
+
+const EMPTY_GROUP_STATE: { members: GroupMember[]; plans: SharedPlan[] } = {
+  members: [],
+  plans: [],
+};
+
 function formatMemberSince(createdAt?: string | null) {
   if (!createdAt) return "2026";
 
@@ -232,6 +338,14 @@ export default function ProfileScreen() {
   const [editCity, setEditCity] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [bookingTab, setBookingTab] = useState("Upcoming");
+  const [walletPreviewState, setWalletPreviewState] = useState<"active" | "empty">("active");
+  const [groupPreviewState, setGroupPreviewState] = useState<"active" | "empty">("active");
+  const [createdPlans, setCreatedPlans] = useState<SharedPlan[]>([]);
+  const [planName, setPlanName] = useState("House Party Split");
+  const [planAmount, setPlanAmount] = useState("12000");
+  const [planSplitType, setPlanSplitType] = useState<"equal" | "custom">("equal");
+  const [planThreshold, setPlanThreshold] = useState(3);
+  const [selectedPlanMembers, setSelectedPlanMembers] = useState<string[]>(mockMembers.slice(0, 3).map((member) => member.id));
   const [toastMessage, setToastMessage] = useState("");
   const [logoutSheetOpen, setLogoutSheetOpen] = useState(false);
   const [addPaySheetOpen, setAddPaySheetOpen] = useState(false);
@@ -252,6 +366,10 @@ export default function ProfileScreen() {
   const displayName = profile?.full_name?.trim() || user?.displayName || "Momentra Customer";
   const profileCity = profile?.city?.trim() || city;
   const memberSince = formatMemberSince(profile?.created_at);
+  const wallet = walletPreviewState === "active" ? mockWallet : emptyMockWallet;
+  const members = groupPreviewState === "active" ? mockMembers : EMPTY_GROUP_STATE.members;
+  const sharedPlans = groupPreviewState === "active" ? [...createdPlans, ...mockSharedPlans] : EMPTY_GROUP_STATE.plans;
+  const partialPlan = sharedPlans.find((plan) => plan.status === "collecting" || plan.status === "threshold_pending");
   const initials = displayName
     .split(" ")
     .map((part) => part[0])
@@ -313,6 +431,43 @@ export default function ProfileScreen() {
       showToast(next ? "Turned on" : "Turned off");
       return { ...current, [key]: next };
     });
+  }
+
+  function togglePlanMember(memberId: string) {
+    setSelectedPlanMembers((current) =>
+      current.includes(memberId) ? current.filter((id) => id !== memberId) : [...current, memberId]
+    );
+  }
+
+  function createSharedPlan() {
+    const amount = Number.parseInt(planAmount.replace(/[^\d]/g, ""), 10) || 0;
+    if (!planName.trim()) {
+      showToast("Add an event name first.");
+      return;
+    }
+    if (!amount) {
+      showToast("Add a valid total amount.");
+      return;
+    }
+    if (!selectedPlanMembers.length) {
+      showToast("Select at least one member.");
+      return;
+    }
+
+    const nextPlan: SharedPlan = {
+      eventName: planName.trim(),
+      id: `mock-plan-${Date.now()}`,
+      memberIds: selectedPlanMembers,
+      paidMemberIds: [],
+      splitType: planSplitType,
+      status: "threshold_pending",
+      threshold: Math.min(planThreshold, selectedPlanMembers.length),
+      totalAmount: amount,
+    };
+
+    setCreatedPlans((current) => [nextPlan, ...current]);
+    setActiveScreen("groups");
+    showToast("Mock shared plan created");
   }
 
   async function loadCustomerProfile(firebaseUser: User) {
@@ -455,6 +610,28 @@ export default function ProfileScreen() {
             <Stat label="Session" value="● Live" small green onPress={() => showToast("You are signed in")} styles={styles} />
           </View>
 
+          <Section title="Balance" styles={styles}>
+            <WalletSummaryCard
+              onHistory={() => openScreen("credits")}
+              onUse={() => showToast(wallet.available ? "Credits will be offered at checkout." : "No credits available yet.")}
+              styles={styles}
+              T={T}
+              wallet={wallet}
+            />
+          </Section>
+
+          <Section title="Groups & Shared Payments" styles={styles}>
+            <SharedPlanPreview
+              members={members}
+              onCreate={() => openScreen("createPlan")}
+              onOpen={() => openScreen("groups")}
+              plan={partialPlan}
+              plansCount={sharedPlans.length}
+              styles={styles}
+              T={T}
+            />
+          </Section>
+
           <Section title="Account" styles={styles}>
             <MenuRow icon="ID" title="Edit Profile" subtitle="Name, location, phone" gradient="purple" onPress={() => openScreen("edit")} styles={styles} T={T} />
             <MenuRow icon="AD" title="Saved Addresses" subtitle="Home, Work, Other" gradient="blue" right={<Pill label="2 saved" tone="gold" T={T} styles={styles} />} onPress={() => openScreen("addresses")} styles={styles} T={T} />
@@ -515,6 +692,9 @@ export default function ProfileScreen() {
       edit: "Edit Profile",
       addresses: "Saved Addresses",
       payments: "Payment Methods",
+      credits: "Momentra Credits",
+      groups: "Shared Plans",
+      createPlan: "Create Shared Plan",
       notifications: "Notifications",
       city: "Select City",
       bookings: "My Bookings",
@@ -529,6 +709,10 @@ export default function ProfileScreen() {
     const action =
       screen === "edit"
         ? { label: savingProfile ? "Saving..." : "Save", onPress: saveProfileChanges }
+        : screen === "createPlan"
+          ? { label: "Create", onPress: createSharedPlan }
+          : screen === "groups"
+            ? { label: "+ Plan", onPress: () => openScreen("createPlan") }
         : screen === "payments"
           ? { label: "+ Add", onPress: () => setAddPaySheetOpen(true) }
           : screen === "addresses"
@@ -542,6 +726,9 @@ export default function ProfileScreen() {
           {screen === "edit" && renderEdit()}
           {screen === "addresses" && renderAddresses()}
           {screen === "payments" && renderPayments()}
+          {screen === "credits" && renderCredits()}
+          {screen === "groups" && renderGroups()}
+          {screen === "createPlan" && renderCreateSharedPlan()}
           {screen === "notifications" && renderNotifications()}
           {screen === "city" && renderCity()}
           {screen === "bookings" && renderBookings()}
@@ -661,6 +848,208 @@ export default function ProfileScreen() {
           <Text style={styles.securityIcon}>◇</Text>
           <Text style={styles.securityText}>Secured by Razorpay · PCI-DSS Level 1 Certified · 256-bit SSL encryption. Momentra never stores your card or UPI credentials.</Text>
         </View>
+      </View>
+    );
+  }
+
+  function renderCredits() {
+    const summary = [
+      ["Earned", formatMockINR(wallet.earned), "green" as const],
+      ["Used", formatMockINR(wallet.used), "red" as const],
+      ["Expiring", formatMockINR(wallet.expiring), "gold" as const],
+    ];
+
+    return (
+      <View>
+        <View style={styles.previewSwitch}>
+          {["active", "empty"].map((state) => (
+            <Pressable
+              key={state}
+              onPress={() => setWalletPreviewState(state as "active" | "empty")}
+              style={[styles.previewChip, walletPreviewState === state && styles.previewChipOn]}
+            >
+              <Text style={[styles.previewChipText, walletPreviewState === state && styles.previewChipTextOn]}>
+                {state === "active" ? "Wallet with balance" : "Empty wallet"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.walletCard}>
+          <View style={styles.walletTop}>
+            <View>
+              <Text style={styles.walletLabel}>Momentra Credits</Text>
+              <Text style={styles.walletAmount}>{formatMockINR(wallet.available)}</Text>
+              <Text style={styles.walletSub}>{wallet.expiring ? `${formatMockINR(wallet.expiring)} expires ${wallet.expiringOn}` : "No credits expiring"}</Text>
+            </View>
+            <View style={styles.walletIcon}>
+              <Text style={styles.walletIconText}>CR</Text>
+            </View>
+          </View>
+          <View style={styles.walletStatGrid}>
+            {summary.map(([label, value, tone]) => (
+              <View key={label} style={styles.walletMiniStat}>
+                <Text style={styles.walletMiniLabel}>{label}</Text>
+                <Text style={[styles.walletMiniValue, tone === "green" && styles.greenText, tone === "red" && styles.redText]}>{value}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.walletActions}>
+            <Pressable onPress={() => showToast("Credits will appear as a checkout option.")} style={styles.walletButton}>
+              <Text style={styles.walletButtonText}>Use at Checkout</Text>
+            </Pressable>
+            <Pressable onPress={() => showToast("Showing mock transaction history")} style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>View History</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <SectionLabel label="Transaction History" styles={styles} />
+        {wallet.transactions.length ? (
+          <View style={styles.group}>
+            {wallet.transactions.map((transaction) => (
+              <WalletTransactionRow key={transaction.id} styles={styles} transaction={transaction} />
+            ))}
+          </View>
+        ) : (
+          <EmptyProfileState
+            action="Explore offers"
+            body="Credits from referrals, refunds, promos, and manual adjustments will appear here."
+            onPress={() => showToast("Offer discovery coming soon")}
+            styles={styles}
+            title="No credit activity yet"
+          />
+        )}
+
+        <Text style={styles.backendNote}>
+          Mock-only for now. Later this can connect to wallet_accounts and wallet_transactions keyed by profile id.
+        </Text>
+      </View>
+    );
+  }
+
+  function renderGroups() {
+    return (
+      <View>
+        <View style={styles.previewSwitch}>
+          {["active", "empty"].map((state) => (
+            <Pressable
+              key={state}
+              onPress={() => setGroupPreviewState(state as "active" | "empty")}
+              style={[styles.previewChip, groupPreviewState === state && styles.previewChipOn]}
+            >
+              <Text style={[styles.previewChipText, groupPreviewState === state && styles.previewChipTextOn]}>
+                {state === "active" ? "Members & plans" : "No members"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <SectionLabel label="Saved Members" styles={styles} />
+        {members.length ? (
+          <View style={styles.memberStrip}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {members.map((member) => (
+                <MemberBubble key={member.id} member={member} styles={styles} />
+              ))}
+            </ScrollView>
+          </View>
+        ) : (
+          <EmptyProfileState
+            action="Add members later"
+            body="Saved friends and family will be reusable when creating shared payment plans."
+            onPress={() => showToast("Member invite mock coming soon")}
+            styles={styles}
+            title="No saved members yet"
+          />
+        )}
+
+        <SectionLabel label="Shared Plans" styles={styles} />
+        {sharedPlans.length ? (
+          sharedPlans.map((plan) => (
+            <SharedPlanCard key={plan.id} members={members} plan={plan} styles={styles} T={T} showToast={showToast} />
+          ))
+        ) : (
+          <EmptyProfileState
+            action="Create shared plan"
+            body="Create a mock split plan with saved members, equal/custom split, and a confirmation threshold."
+            onPress={() => openScreen("createPlan")}
+            styles={styles}
+            title="No shared plans yet"
+          />
+        )}
+
+        <Pressable onPress={() => openScreen("createPlan")} style={({ pressed }) => [styles.createPlanButton, pressed && styles.pressed]}>
+          <Text style={styles.createPlanText}>Create Shared Plan</Text>
+          <Text style={styles.createPlanSub}>Reuse Kitty split logic: total, members, paid/pending, threshold</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  function renderCreateSharedPlan() {
+    const amount = Number.parseInt(planAmount.replace(/[^\d]/g, ""), 10) || 0;
+    const selectedMembers = members.filter((member) => selectedPlanMembers.includes(member.id));
+    const perHead = selectedMembers.length ? Math.ceil(amount / selectedMembers.length) : 0;
+
+    return (
+      <View>
+        <Field label="Event / Plan Name" onChangeText={setPlanName} styles={styles} value={planName} />
+        <Field keyboardType="phone-pad" label="Total Amount" onChangeText={setPlanAmount} styles={styles} value={planAmount} />
+
+        <SectionLabel label="Members" styles={styles} />
+        <View style={styles.group}>
+          {members.map((member) => {
+            const selected = selectedPlanMembers.includes(member.id);
+            return (
+              <Pressable key={member.id} onPress={() => togglePlanMember(member.id)} style={({ pressed }) => [styles.memberSelectRow, pressed && styles.pressed]}>
+                <View style={[styles.memberAvatar, selected && styles.memberAvatarOn]}>
+                  <Text style={styles.memberAvatarText}>{member.name[0]}</Text>
+                </View>
+                <View style={styles.rowBody}>
+                  <Text style={styles.rowTitle}>{member.name}</Text>
+                  <Text style={styles.rowSubtitle}>{member.phone}</Text>
+                </View>
+                <View style={[styles.radio, selected && styles.radioOn]} />
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <SectionLabel label="Split Type" styles={styles} />
+        <View style={styles.splitChoiceRow}>
+          {["equal", "custom"].map((type) => (
+            <Pressable key={type} onPress={() => setPlanSplitType(type as "equal" | "custom")} style={[styles.splitChoice, planSplitType === type && styles.splitChoiceOn]}>
+              <Text style={[styles.splitChoiceText, planSplitType === type && styles.splitChoiceTextOn]}>{type === "equal" ? "Equal split" : "Custom split"}</Text>
+              <Text style={styles.splitChoiceSub}>{type === "equal" ? `${formatMockINR(perHead)} each` : "Mock custom weights later"}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <SectionLabel label="Minimum to Confirm" styles={styles} />
+        <View style={styles.thresholdProfileCard}>
+          <Text style={styles.thresholdProfileCopy}>
+            Confirm when at least {Math.min(planThreshold, selectedMembers.length || 1)} of {selectedMembers.length || 1} members pay. If threshold is not reached, the plan stays pending.
+          </Text>
+          <View style={styles.thresholdControls}>
+            <Pressable onPress={() => setPlanThreshold((value) => Math.max(1, value - 1))} style={styles.thresholdButton}><Text style={styles.thresholdButtonText}>-</Text></Pressable>
+            <Text style={styles.thresholdNumber}>{Math.min(planThreshold, selectedMembers.length || 1)}</Text>
+            <Pressable onPress={() => setPlanThreshold((value) => Math.min(selectedMembers.length || 1, value + 1))} style={styles.thresholdButton}><Text style={styles.thresholdButtonText}>+</Text></Pressable>
+          </View>
+        </View>
+
+        <SectionLabel label="Review" styles={styles} />
+        <View style={styles.reviewPlanCard}>
+          <ReviewLine label="Plan" value={planName || "Untitled plan"} styles={styles} />
+          <ReviewLine label="Total" value={formatMockINR(amount)} styles={styles} />
+          <ReviewLine label="Members" value={`${selectedMembers.length} selected`} styles={styles} />
+          <ReviewLine label="Split" value={planSplitType === "equal" ? `${formatMockINR(perHead)} each` : "Custom split mock"} styles={styles} />
+          <ReviewLine label="Threshold" value={`${Math.min(planThreshold, selectedMembers.length || 1)} payments`} styles={styles} />
+        </View>
+
+        <Pressable onPress={createSharedPlan} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
+          <Text style={styles.saveText}>Create Mock Shared Plan</Text>
+        </Pressable>
       </View>
     );
   }
@@ -825,6 +1214,235 @@ export default function ProfileScreen() {
       </View>
     );
   }
+}
+
+function WalletSummaryCard({
+  onHistory,
+  onUse,
+  styles,
+  wallet,
+}: {
+  onHistory: () => void;
+  onUse: () => void;
+  styles: ReturnType<typeof createStyles>;
+  T: Palette;
+  wallet: MockWallet;
+}) {
+  return (
+    <View style={styles.inlineWallet}>
+      <View style={styles.inlineWalletTop}>
+        <View>
+          <Text style={styles.inlineEyebrow}>Available balance</Text>
+          <Text style={styles.inlineWalletAmount}>{formatMockINR(wallet.available)}</Text>
+        </View>
+        <View style={styles.inlineWalletToken}>
+          <Text style={styles.inlineWalletTokenText}>CR</Text>
+        </View>
+      </View>
+      <View style={styles.inlineWalletStats}>
+        <Text style={styles.inlineWalletStat}>Earned {formatMockINR(wallet.earned)}</Text>
+        <Text style={styles.inlineWalletStat}>Used {formatMockINR(wallet.used)}</Text>
+        <Text style={styles.inlineWalletStat}>Expiring {formatMockINR(wallet.expiring)}</Text>
+      </View>
+      <View style={styles.inlineActions}>
+        <Pressable onPress={onUse} style={styles.inlinePrimary}>
+          <Text style={styles.inlinePrimaryText}>Use at checkout</Text>
+        </Pressable>
+        <Pressable onPress={onHistory} style={styles.inlineSecondary}>
+          <Text style={styles.inlineSecondaryText}>View history</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function SharedPlanPreview({
+  members,
+  onCreate,
+  onOpen,
+  plan,
+  plansCount,
+  styles,
+}: {
+  members: GroupMember[];
+  onCreate: () => void;
+  onOpen: () => void;
+  plan?: SharedPlan;
+  plansCount: number;
+  styles: ReturnType<typeof createStyles>;
+  T: Palette;
+}) {
+  const paid = plan?.paidMemberIds.length ?? 0;
+  const invited = plan?.memberIds.length ?? members.length;
+
+  return (
+    <View style={styles.inlineGroupCard}>
+      <View style={styles.inlineGroupTop}>
+        <View>
+          <Text style={styles.inlineEyebrow}>Shared plans</Text>
+          <Text style={styles.inlineGroupTitle}>{plan ? plan.eventName : "Start a group collection"}</Text>
+          <Text style={styles.inlineGroupSub}>
+            {plan ? `${paid}/${invited} paid · threshold ${plan.threshold}` : `${members.length} saved members · ${plansCount} plans`}
+          </Text>
+        </View>
+        <View style={styles.memberStack}>
+          {members.slice(0, 3).map((member) => (
+            <View key={member.id} style={styles.memberStackAvatar}>
+              <Text style={styles.memberStackText}>{member.name[0]}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={styles.inlineActions}>
+        <Pressable onPress={onOpen} style={styles.inlinePrimary}>
+          <Text style={styles.inlinePrimaryText}>Open plans</Text>
+        </Pressable>
+        <Pressable onPress={onCreate} style={styles.inlineSecondary}>
+          <Text style={styles.inlineSecondaryText}>Create plan</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function WalletTransactionRow({ styles, transaction }: { styles: ReturnType<typeof createStyles>; transaction: WalletTransaction }) {
+  const positive = transaction.amount >= 0;
+  return (
+    <View style={styles.transactionRow}>
+      <IconTile icon={walletTypeLabel(transaction.type)} gradient={positive ? "green" : "red"} styles={styles} />
+      <View style={styles.rowBody}>
+        <Text style={styles.rowTitle}>{transaction.note}</Text>
+        <Text style={styles.rowSubtitle}>{transaction.date} · {transaction.type.replace("_", " ")}</Text>
+      </View>
+      <Text style={[styles.transactionAmount, positive ? styles.greenText : styles.redText]}>
+        {positive ? "+" : "-"}{formatMockINR(Math.abs(transaction.amount))}
+      </Text>
+    </View>
+  );
+}
+
+function MemberBubble({ member, styles }: { member: GroupMember; styles: ReturnType<typeof createStyles> }) {
+  return (
+    <View style={styles.memberBubble}>
+      <View style={styles.memberAvatar}>
+        <Text style={styles.memberAvatarText}>{member.name[0]}</Text>
+      </View>
+      <Text style={styles.memberName} numberOfLines={1}>{member.name}</Text>
+      <Text style={styles.memberStatus}>{member.status}</Text>
+    </View>
+  );
+}
+
+function SharedPlanCard({
+  members,
+  plan,
+  showToast,
+  styles,
+  T,
+}: {
+  members: GroupMember[];
+  plan: SharedPlan;
+  showToast: (message: string) => void;
+  styles: ReturnType<typeof createStyles>;
+  T: Palette;
+}) {
+  const paid = plan.paidMemberIds.length;
+  const invited = plan.memberIds.length;
+  const pending = Math.max(invited - paid, 0);
+  const perHead = invited ? Math.ceil(plan.totalAmount / invited) : plan.totalAmount;
+  const reached = paid >= plan.threshold;
+  const selectedMembers = members.filter((member) => plan.memberIds.includes(member.id));
+
+  return (
+    <Pressable onPress={() => showToast("Mock tracker details")} style={({ pressed }) => [styles.sharedPlanCard, pressed && styles.pressed]}>
+      <View style={styles.sharedPlanTop}>
+        <View>
+          <Text style={styles.sharedPlanTitle}>{plan.eventName}</Text>
+          <Text style={styles.sharedPlanSub}>{plan.splitType} split · {formatMockINR(perHead)} per member</Text>
+        </View>
+        <Pill label={planStatusLabel(plan, reached)} tone={reached ? "green" : "gold"} T={T} styles={styles} />
+      </View>
+      <View style={styles.planProgressTrack}>
+        <View style={[styles.planProgressFill, { width: `${invited ? Math.round((paid / invited) * 100) : 0}%` }]} />
+      </View>
+      <View style={styles.planMetaGrid}>
+        <PlanMetric label="Paid" value={`${paid}`} styles={styles} />
+        <PlanMetric label="Pending" value={`${pending}`} styles={styles} />
+        <PlanMetric label="Threshold" value={`${plan.threshold}`} styles={styles} />
+        <PlanMetric label="Total" value={formatMockINR(plan.totalAmount)} styles={styles} />
+      </View>
+      <View style={styles.planMembersLine}>
+        {selectedMembers.slice(0, 4).map((member) => (
+          <Text key={member.id} style={styles.planMemberPill}>{member.name.split(" ")[0]}</Text>
+        ))}
+      </View>
+    </Pressable>
+  );
+}
+
+function PlanMetric({ label, styles, value }: { label: string; styles: ReturnType<typeof createStyles>; value: string }) {
+  return (
+    <View style={styles.planMetric}>
+      <Text style={styles.planMetricValue}>{value}</Text>
+      <Text style={styles.planMetricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function ReviewLine({ label, styles, value }: { label: string; styles: ReturnType<typeof createStyles>; value: string }) {
+  return (
+    <View style={styles.reviewLine}>
+      <Text style={styles.reviewLineLabel}>{label}</Text>
+      <Text style={styles.reviewLineValue}>{value}</Text>
+    </View>
+  );
+}
+
+function EmptyProfileState({
+  action,
+  body,
+  onPress,
+  styles,
+  title,
+}: {
+  action: string;
+  body: string;
+  onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
+  title: string;
+}) {
+  return (
+    <View style={styles.emptyProfileCard}>
+      <Text style={styles.emptyProfileTitle}>{title}</Text>
+      <Text style={styles.emptyProfileBody}>{body}</Text>
+      <Pressable onPress={onPress} style={styles.emptyProfileButton}>
+        <Text style={styles.emptyProfileButtonText}>{action}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function formatMockINR(value: number) {
+  return `₹${value.toLocaleString("en-IN")}`;
+}
+
+function walletTypeLabel(type: WalletTransactionType) {
+  const labels: Record<WalletTransactionType, string> = {
+    manual_credit: "MC",
+    promo: "PR",
+    redemption: "RD",
+    referral: "RF",
+    refund: "RE",
+  };
+
+  return labels[type];
+}
+
+function planStatusLabel(plan: SharedPlan, thresholdReached: boolean) {
+  if (plan.status === "completed") return "Completed";
+  if (thresholdReached) return "Threshold reached";
+  if (plan.status === "threshold_pending") return "Threshold pending";
+  return "Collecting";
 }
 
 function TopBar({
@@ -1789,6 +2407,541 @@ function createStyles(T: Palette) {
       color: T.gold2,
       fontSize: 14,
       fontWeight: "800",
+    },
+    inlineWallet: {
+      backgroundColor: "#1a0e04",
+      borderColor: "rgba(201,151,90,0.28)",
+      borderRadius: 18,
+      borderWidth: 1,
+      marginHorizontal: 12,
+      padding: 16,
+    },
+    inlineWalletTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 14,
+    },
+    inlineEyebrow: {
+      color: "rgba(201,151,90,0.62)",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.8,
+      marginBottom: 5,
+      textTransform: "uppercase",
+    },
+    inlineWalletAmount: {
+      color: T.gold2,
+      fontFamily: Platform.select({ web: "Cormorant Garamond, serif", default: undefined }),
+      fontSize: 34,
+      lineHeight: 36,
+    },
+    inlineWalletToken: {
+      alignItems: "center",
+      backgroundColor: "rgba(201,151,90,0.11)",
+      borderColor: "rgba(201,151,90,0.22)",
+      borderRadius: 12,
+      borderWidth: 1,
+      height: 42,
+      justifyContent: "center",
+      width: 42,
+    },
+    inlineWalletTokenText: {
+      color: T.gold,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    inlineWalletStats: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 14,
+    },
+    inlineWalletStat: {
+      backgroundColor: "rgba(255,255,255,0.035)",
+      borderColor: T.border,
+      borderRadius: 999,
+      borderWidth: 1,
+      color: T.text3,
+      fontSize: 11,
+      fontWeight: "700",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    inlineActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 9,
+    },
+    inlinePrimary: {
+      alignItems: "center",
+      backgroundColor: T.red,
+      borderRadius: 12,
+      flexGrow: 1,
+      justifyContent: "center",
+      minWidth: 132,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    inlinePrimaryText: {
+      color: "#fff",
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    inlineSecondary: {
+      alignItems: "center",
+      borderColor: T.border2,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      flexGrow: 1,
+      justifyContent: "center",
+      minWidth: 124,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    inlineSecondaryText: {
+      color: T.gold2,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    inlineGroupCard: {
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 18,
+      borderWidth: 1,
+      marginHorizontal: 12,
+      padding: 16,
+    },
+    inlineGroupTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginBottom: 14,
+    },
+    inlineGroupTitle: {
+      color: T.text,
+      fontSize: 17,
+      fontWeight: "800",
+      marginBottom: 3,
+    },
+    inlineGroupSub: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    memberStack: {
+      flexDirection: "row",
+      minWidth: 72,
+      paddingLeft: 16,
+    },
+    memberStackAvatar: {
+      alignItems: "center",
+      backgroundColor: T.bg3,
+      borderColor: T.border2,
+      borderRadius: 14,
+      borderWidth: 1,
+      height: 28,
+      justifyContent: "center",
+      marginLeft: -8,
+      width: 28,
+    },
+    memberStackText: {
+      color: T.gold2,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    previewSwitch: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 14,
+      marginHorizontal: 12,
+    },
+    previewChip: {
+      borderColor: T.border2,
+      borderRadius: 999,
+      borderWidth: 1,
+      paddingHorizontal: 13,
+      paddingVertical: 8,
+    },
+    previewChipOn: {
+      backgroundColor: T.red,
+      borderColor: T.red,
+    },
+    previewChipText: {
+      color: T.text3,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    previewChipTextOn: {
+      color: "#fff",
+    },
+    walletStatGrid: {
+      flexDirection: "row",
+      gap: 9,
+      marginBottom: 16,
+    },
+    walletMiniStat: {
+      backgroundColor: "rgba(255,255,255,0.035)",
+      borderColor: T.border,
+      borderRadius: 14,
+      borderWidth: 1,
+      flex: 1,
+      padding: 12,
+    },
+    walletMiniLabel: {
+      color: T.text3,
+      fontSize: 10,
+      fontWeight: "800",
+      letterSpacing: 1.2,
+      marginBottom: 5,
+      textTransform: "uppercase",
+    },
+    walletMiniValue: {
+      color: T.gold2,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    walletActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+    },
+    secondaryButton: {
+      alignItems: "center",
+      borderColor: T.border2,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      flex: 1,
+      justifyContent: "center",
+      minWidth: 132,
+      padding: 13,
+    },
+    secondaryButtonText: {
+      color: T.gold2,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    transactionRow: {
+      alignItems: "center",
+      borderBottomColor: T.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    transactionAmount: {
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    redText: {
+      color: T.red,
+    },
+    backendNote: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 18,
+      marginHorizontal: 16,
+      marginTop: 12,
+    },
+    memberStrip: {
+      marginBottom: 12,
+      marginHorizontal: 12,
+    },
+    memberBubble: {
+      alignItems: "center",
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginRight: 10,
+      minWidth: 104,
+      paddingHorizontal: 12,
+      paddingVertical: 13,
+    },
+    memberAvatar: {
+      alignItems: "center",
+      backgroundColor: T.bg3,
+      borderColor: T.border2,
+      borderRadius: 18,
+      borderWidth: 1,
+      height: 36,
+      justifyContent: "center",
+      width: 36,
+    },
+    memberAvatarOn: {
+      backgroundColor: T.red,
+      borderColor: T.red,
+    },
+    memberAvatarText: {
+      color: T.gold2,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+    memberName: {
+      color: T.text,
+      fontSize: 12,
+      fontWeight: "800",
+      marginTop: 8,
+      maxWidth: 90,
+    },
+    memberStatus: {
+      color: T.text3,
+      fontSize: 10,
+      marginTop: 3,
+      textTransform: "capitalize",
+    },
+    sharedPlanCard: {
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 18,
+      borderWidth: 1,
+      marginBottom: 12,
+      marginHorizontal: 12,
+      padding: 16,
+    },
+    sharedPlanTop: {
+      alignItems: "flex-start",
+      flexDirection: "row",
+      gap: 12,
+      justifyContent: "space-between",
+      marginBottom: 14,
+    },
+    sharedPlanTitle: {
+      color: T.text,
+      fontSize: 16,
+      fontWeight: "900",
+      marginBottom: 3,
+    },
+    sharedPlanSub: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 17,
+    },
+    planProgressTrack: {
+      backgroundColor: "rgba(255,255,255,0.07)",
+      borderRadius: 999,
+      height: 5,
+      marginBottom: 13,
+      overflow: "hidden",
+    },
+    planProgressFill: {
+      backgroundColor: T.gold2,
+      borderRadius: 999,
+      height: "100%",
+    },
+    planMetaGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 12,
+    },
+    planMetric: {
+      backgroundColor: "rgba(255,255,255,0.035)",
+      borderColor: T.border,
+      borderRadius: 12,
+      borderWidth: 1,
+      minWidth: 82,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+    },
+    planMetricValue: {
+      color: T.text,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    planMetricLabel: {
+      color: T.text3,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 2,
+      textTransform: "uppercase",
+    },
+    planMembersLine: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+    planMemberPill: {
+      backgroundColor: "rgba(201,151,90,0.10)",
+      borderColor: "rgba(201,151,90,0.22)",
+      borderRadius: 999,
+      borderWidth: 1,
+      color: T.gold2,
+      fontSize: 11,
+      fontWeight: "800",
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    createPlanButton: {
+      backgroundColor: "rgba(192,57,43,0.10)",
+      borderColor: "rgba(192,57,43,0.32)",
+      borderRadius: 16,
+      borderWidth: 1.5,
+      marginHorizontal: 12,
+      marginTop: 8,
+      padding: 16,
+    },
+    createPlanText: {
+      color: T.text,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    createPlanSub: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 4,
+    },
+    memberSelectRow: {
+      alignItems: "center",
+      borderBottomColor: T.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    splitChoiceRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginHorizontal: 12,
+    },
+    splitChoice: {
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      flex: 1,
+      minWidth: 150,
+      padding: 15,
+    },
+    splitChoiceOn: {
+      backgroundColor: "rgba(192,57,43,0.10)",
+      borderColor: T.red,
+    },
+    splitChoiceText: {
+      color: T.text,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    splitChoiceTextOn: {
+      color: T.gold2,
+    },
+    splitChoiceSub: {
+      color: T.text3,
+      fontSize: 12,
+      marginTop: 5,
+    },
+    thresholdProfileCard: {
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginHorizontal: 12,
+      padding: 16,
+    },
+    thresholdProfileCopy: {
+      color: T.text2,
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 20,
+    },
+    thresholdControls: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 14,
+    },
+    thresholdButton: {
+      alignItems: "center",
+      backgroundColor: T.bg3,
+      borderColor: T.border2,
+      borderRadius: 12,
+      borderWidth: 1,
+      height: 38,
+      justifyContent: "center",
+      width: 38,
+    },
+    thresholdButtonText: {
+      color: T.gold2,
+      fontSize: 18,
+      fontWeight: "900",
+    },
+    thresholdNumber: {
+      color: T.text,
+      fontSize: 18,
+      fontWeight: "900",
+      minWidth: 26,
+      textAlign: "center",
+    },
+    reviewPlanCard: {
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      marginHorizontal: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 6,
+    },
+    reviewLine: {
+      alignItems: "center",
+      borderBottomColor: T.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingVertical: 11,
+    },
+    reviewLineLabel: {
+      color: T.text3,
+      fontSize: 12,
+      fontWeight: "800",
+    },
+    reviewLineValue: {
+      color: T.text,
+      flex: 1,
+      fontSize: 13,
+      fontWeight: "900",
+      textAlign: "right",
+    },
+    emptyProfileCard: {
+      alignItems: "flex-start",
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 16,
+      borderStyle: "dashed",
+      borderWidth: 1.5,
+      marginBottom: 12,
+      marginHorizontal: 12,
+      padding: 18,
+    },
+    emptyProfileTitle: {
+      color: T.text,
+      fontSize: 16,
+      fontWeight: "900",
+      marginBottom: 5,
+    },
+    emptyProfileBody: {
+      color: T.text3,
+      fontSize: 13,
+      lineHeight: 20,
+      marginBottom: 14,
+    },
+    emptyProfileButton: {
+      backgroundColor: "rgba(201,151,90,0.12)",
+      borderColor: "rgba(201,151,90,0.28)",
+      borderRadius: 12,
+      borderWidth: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    emptyProfileButtonText: {
+      color: T.gold2,
+      fontSize: 12,
+      fontWeight: "900",
     },
     payRow: {
       alignItems: "center",
