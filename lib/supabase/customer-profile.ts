@@ -37,7 +37,9 @@ type ProfilePayload = {
 };
 
 const PROFILE_TABLE = "profiles";
-const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login,momentra_id";
+// Keep the login-critical profile sync tolerant of older Supabase schemas.
+// Momentra ID is derived from `id` in the UI and stored by the Circle migration when available.
+const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login";
 
 function isRecoverableProfileUpsertError(error: SupabaseProfileError) {
   return (
