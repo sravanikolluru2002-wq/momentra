@@ -4,6 +4,7 @@ import { normalizeIndianPhoneNumber } from "@/lib/phone";
 import { supabase } from "@/lib/supabase";
 
 export type CustomerProfileRow = {
+  avatar_url: string | null;
   city: string | null;
   created_at: string | null;
   firebase_uid: string | null;
@@ -22,6 +23,7 @@ export type SupabaseProfileError = {
 };
 
 type ProfilePayload = {
+  avatar_url?: string | null;
   budget?: string | null;
   celebration_goal?: string | null;
   city?: string | null;
@@ -40,6 +42,7 @@ const PROFILE_TABLE = "profiles";
 // Keep the login-critical profile sync tolerant of older Supabase schemas.
 // Momentra ID is derived from `id` in the UI and stored by the Circle migration when available.
 const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login";
+const PROFILE_SELECT_WITH_AVATAR = `${PROFILE_SELECT},avatar_url`;
 
 function isRecoverableProfileUpsertError(error: SupabaseProfileError) {
   return (
@@ -173,4 +176,48 @@ export async function ensureCustomerProfile(
   }
 
   return data as CustomerProfileRow;
+}
+
+function withOptionalAvatar(row: CustomerProfileRow) {
+  return {
+    ...row,
+    avatar_url: row.avatar_url ?? null,
+  };
+}
+
+export async function getCustomerProfile(profileId: string) {
+  const extended = await supabase
+    .from(PROFILE_TABLE)
+    .select(PROFILE_SELECT_WITH_AVATAR)
+    .eq("id", profileId)
+    .single();
+
+  if (!extended.error) {
+    return withOptionalAvatar(extended.data as CustomerProfileRow);
+  }
+
+  if (!/avatar_url|schema cache|column/i.test(`${extended.error.message} ${extended.error.details} ${extended.error.hint}`)) {
+    throw extended.error;
+  }
+
+  const basic = await supabase
+    .from(PROFILE_TABLE)
+    .select(PROFILE_SELECT)
+    .eq("id", profileId)
+    .single();
+
+  if (basic.error) throw basic.error;
+  return withOptionalAvatar(basic.data as CustomerProfileRow);
+}
+
+export async function updateCustomerProfileAvatar(profileId: string, avatarUrl: string | null) {
+  const { data, error } = await supabase
+    .from(PROFILE_TABLE)
+    .update({ avatar_url: avatarUrl })
+    .eq("id", profileId)
+    .select(PROFILE_SELECT_WITH_AVATAR)
+    .single();
+
+  if (error) throw error;
+  return withOptionalAvatar(data as CustomerProfileRow);
 }

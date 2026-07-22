@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -23,7 +24,9 @@ import { resetRecaptchaVerifier } from "@/lib/firebase/recaptcha";
 import {
   CustomerProfileRow,
   ensureCustomerProfile,
+  getCustomerProfile,
   logSupabaseProfileError,
+  updateCustomerProfileAvatar,
 } from "@/lib/supabase/customer-profile";
 import { supabase } from "@/lib/supabase";
 import {
@@ -284,6 +287,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [activeScreen, setActiveScreen] = useState<ScreenId>("main");
   const [city, setCity] = useState("Vizag");
   const [cityQuery, setCityQuery] = useState("");
@@ -323,6 +327,7 @@ export default function ProfileScreen() {
 
   const userPhone = user?.phoneNumber ?? user?.phone ?? "";
   const displayName = profile?.full_name?.trim() || user?.displayName || "Momentra Customer";
+  const avatarUrl = profile?.avatar_url?.trim() || "";
   const profileCity = profile?.city?.trim() || city;
   const memberSince = formatMemberSince(profile?.created_at);
   const wallet = walletPreviewState === "active" ? mockWallet : emptyMockWallet;
@@ -552,12 +557,13 @@ export default function ProfileScreen() {
     try {
       const phone = firebaseUser.phoneNumber ?? "";
       const row = await ensureCustomerProfile(firebaseUser, {}, phone);
+      const completeProfile = await getCustomerProfile(row.id).catch(() => row);
 
-      setProfile(row);
-      setCity(row?.city?.trim() || "Vizag");
-      setEditFullName(row?.full_name?.trim() || firebaseUser.displayName || "");
-      setEditCity(row?.city?.trim() || "Vizag");
-      setEditPhone(row?.phone_number || phone);
+      setProfile(completeProfile);
+      setCity(completeProfile?.city?.trim() || "Vizag");
+      setEditFullName(completeProfile?.full_name?.trim() || firebaseUser.displayName || "");
+      setEditCity(completeProfile?.city?.trim() || "Vizag");
+      setEditPhone(completeProfile?.phone_number || phone);
     } catch (error) {
       logSupabaseProfileError("profile load/ensure failed", error);
       showToast("We could not load your profile details.");
@@ -588,12 +594,16 @@ export default function ProfileScreen() {
         city: cleanCity || null,
         full_name: cleanName,
       }, cleanPhone);
+      const mergedProfile = {
+        ...nextProfile,
+        avatar_url: profile?.avatar_url ?? null,
+      };
 
-      setProfile(nextProfile);
-      setCity(nextProfile.city?.trim() || "Vizag");
-      setEditFullName(nextProfile.full_name?.trim() || cleanName);
-      setEditCity(nextProfile.city?.trim() || cleanCity);
-      setEditPhone(nextProfile.phone_number || cleanPhone);
+      setProfile(mergedProfile);
+      setCity(mergedProfile.city?.trim() || "Vizag");
+      setEditFullName(mergedProfile.full_name?.trim() || cleanName);
+      setEditCity(mergedProfile.city?.trim() || cleanCity);
+      setEditPhone(mergedProfile.phone_number || cleanPhone);
       closeScreen();
       showToast("Profile saved successfully");
     } catch (error) {
@@ -601,6 +611,61 @@ export default function ProfileScreen() {
       showToast("We could not save your profile right now.");
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function chooseProfilePhoto() {
+    if (!profile?.id) {
+      showToast("Profile is still loading.");
+      return;
+    }
+
+    if (Platform.OS !== "web" || typeof document === "undefined") {
+      showToast("Photo upload is available on web for now.");
+      return;
+    }
+
+    try {
+      const file = await pickImageFileFromBrowser();
+      if (!file) return;
+
+      if (!file.type.startsWith("image/")) {
+        showToast("Please choose an image file.");
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        showToast("Please choose an image under 5 MB.");
+        return;
+      }
+
+      setUploadingAvatar(true);
+      const publicUrl = await uploadProfilePhoto(profile.id, file);
+      const nextProfile = await updateCustomerProfileAvatar(profile.id, publicUrl);
+
+      setProfile(nextProfile);
+      showToast("Profile photo saved");
+    } catch (error) {
+      console.error("[Momentra profile] avatar upload failed", error);
+      showToast("We could not save your photo. Check Supabase storage setup.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  async function removeProfilePhoto() {
+    if (!profile?.id || uploadingAvatar) return;
+
+    setUploadingAvatar(true);
+    try {
+      const nextProfile = await updateCustomerProfileAvatar(profile.id, null);
+      setProfile(nextProfile);
+      showToast("Profile photo removed");
+    } catch (error) {
+      console.error("[Momentra profile] avatar remove failed", error);
+      showToast("We could not remove your photo.");
+    } finally {
+      setUploadingAvatar(false);
     }
   }
 
@@ -659,7 +724,11 @@ export default function ProfileScreen() {
         <ScrollView contentContainerStyle={styles.screenBody} showsVerticalScrollIndicator={false}>
           <View style={styles.hero}>
             <Pressable onPress={() => openScreen("edit")} style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}>
-              <Text style={styles.avatarText}>{initials}</Text>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>{initials}</Text>
+              )}
               <View style={styles.avatarEdit}>
                 <Text style={styles.avatarEditText}>✎</Text>
               </View>
@@ -835,13 +904,22 @@ export default function ProfileScreen() {
   function renderEdit() {
     return (
       <View>
-        <Pressable onPress={() => showToast("Photo upload coming soon")} style={({ pressed }) => [styles.editAvatar, pressed && styles.pressed]}>
-          <Text style={styles.editAvatarText}>{initials}</Text>
+        <Pressable disabled={uploadingAvatar} onPress={chooseProfilePhoto} style={({ pressed }) => [styles.editAvatar, pressed && styles.pressed, uploadingAvatar && styles.disabled]}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.editAvatarImage} />
+          ) : (
+            <Text style={styles.editAvatarText}>{initials}</Text>
+          )}
           <View style={styles.editCamera}>
             <Text style={styles.avatarEditText}>⌁</Text>
           </View>
         </Pressable>
-        <Text style={styles.tapPhoto}>Tap to change photo</Text>
+        <Text style={styles.tapPhoto}>{uploadingAvatar ? "Saving photo..." : "Tap to change photo"}</Text>
+        {avatarUrl ? (
+          <Pressable disabled={uploadingAvatar} onPress={removeProfilePhoto} style={({ pressed }) => [styles.removePhotoButton, pressed && styles.pressed, uploadingAvatar && styles.disabled]}>
+            <Text style={styles.removePhotoText}>Remove photo</Text>
+          </Pressable>
+        ) : null}
         <Field label="Full Name" onChangeText={setEditFullName} styles={styles} value={editFullName} />
         <Field label="City / Location" onChangeText={setEditCity} styles={styles} value={editCity} />
         <Field
@@ -1726,6 +1804,34 @@ function makeFallbackMomentraId(profileId: string) {
   return `MOM-${profileId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 
+function pickImageFileFromBrowser() {
+  return new Promise<File | null>((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp,image/gif";
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
+async function uploadProfilePhoto(profileId: string, file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const path = `${profileId}/avatar-${Date.now()}.${extension}`;
+  const { error } = await supabase.storage
+    .from("profile-photos")
+    .upload(path, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+      upsert: true,
+    });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from("profile-photos").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 function profileDisplayName(profile?: PublicCircleProfile | null) {
   return profile?.full_name?.trim() || "Momentra Customer";
 }
@@ -2265,6 +2371,11 @@ function createStyles(T: Palette) {
       width: 72,
       backgroundColor: T.red,
     },
+    avatarImage: {
+      borderRadius: 33,
+      height: "100%",
+      width: "100%",
+    },
     avatarText: {
       color: "#fff",
       fontFamily: Platform.select({ web: "Cormorant Garamond, serif", default: undefined }),
@@ -2519,6 +2630,11 @@ function createStyles(T: Palette) {
       marginTop: 14,
       width: 90,
     },
+    editAvatarImage: {
+      borderRadius: 42,
+      height: "100%",
+      width: "100%",
+    },
     editAvatarText: {
       color: "#fff",
       fontFamily: Platform.select({ web: "Cormorant Garamond, serif", default: undefined }),
@@ -2541,9 +2657,24 @@ function createStyles(T: Palette) {
     tapPhoto: {
       color: T.text3,
       fontSize: 12,
-      marginBottom: 26,
+      marginBottom: 14,
       marginTop: 8,
       textAlign: "center",
+    },
+    removePhotoButton: {
+      alignItems: "center",
+      alignSelf: "center",
+      borderColor: "rgba(192,57,43,0.24)",
+      borderRadius: 999,
+      borderWidth: 1,
+      marginBottom: 22,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+    },
+    removePhotoText: {
+      color: T.red,
+      fontSize: 12,
+      fontWeight: "800",
     },
     fieldWrap: {
       marginBottom: 14,
