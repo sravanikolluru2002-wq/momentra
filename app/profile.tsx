@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +25,21 @@ import {
   ensureCustomerProfile,
   logSupabaseProfileError,
 } from "@/lib/supabase/customer-profile";
+import { supabase } from "@/lib/supabase";
+import {
+  CircleMember,
+  CircleRequest,
+  PublicCircleProfile,
+  SharedPaymentPlan,
+  createSharedPaymentPlan,
+  listCircleMembers,
+  listCircleRequests,
+  listSharedPaymentPlans,
+  normalizeMomentraId,
+  respondToCircleRequest,
+  searchProfileByMomentraId,
+  sendCircleRequest,
+} from "@/lib/supabase/circle";
 
 type ScreenId =
   | "main"
@@ -63,23 +79,6 @@ type MockWallet = {
   transactions: WalletTransaction[];
   used: number;
 };
-type GroupMember = {
-  id: string;
-  name: string;
-  phone: string;
-  status: "saved" | "invited" | "paid" | "pending";
-};
-type SharedPlan = {
-  id: string;
-  eventName: string;
-  totalAmount: number;
-  memberIds: string[];
-  paidMemberIds: string[];
-  splitType: "equal" | "custom";
-  threshold: number;
-  status: "collecting" | "confirmed" | "completed" | "threshold_pending";
-};
-
 const DARK = {
   bg: "#0d0905",
   bg2: "#1a0e08",
@@ -264,52 +263,6 @@ const emptyMockWallet: MockWallet = {
   transactions: [],
 };
 
-const mockMembers: GroupMember[] = [
-  { id: "m-priya", name: "Priya Mehta", phone: "98765 43210", status: "paid" },
-  { id: "m-rekha", name: "Rekha Sharma", phone: "91234 56789", status: "pending" },
-  { id: "m-anjali", name: "Anjali Nair", phone: "99887 76655", status: "invited" },
-  { id: "m-kavitha", name: "Kavitha Reddy", phone: "90099 88776", status: "saved" },
-  { id: "m-deepa", name: "Deepa Krishnan", phone: "99001 22334", status: "pending" },
-];
-
-const mockSharedPlans: SharedPlan[] = [
-  {
-    id: "plan-kitty",
-    eventName: "Sunday Kitty Brunch",
-    memberIds: ["m-priya", "m-rekha", "m-anjali", "m-kavitha", "m-deepa"],
-    paidMemberIds: ["m-priya"],
-    splitType: "equal",
-    status: "threshold_pending",
-    threshold: 3,
-    totalAmount: 15000,
-  },
-  {
-    id: "plan-birthday",
-    eventName: "Birthday Terrace Setup",
-    memberIds: ["m-priya", "m-rekha", "m-anjali"],
-    paidMemberIds: ["m-priya", "m-rekha", "m-anjali"],
-    splitType: "equal",
-    status: "completed",
-    threshold: 2,
-    totalAmount: 9000,
-  },
-  {
-    id: "plan-cocktail",
-    eventName: "Cocktail Party Advance",
-    memberIds: ["m-priya", "m-rekha", "m-anjali", "m-kavitha"],
-    paidMemberIds: ["m-priya", "m-rekha"],
-    splitType: "custom",
-    status: "collecting",
-    threshold: 2,
-    totalAmount: 22000,
-  },
-];
-
-const EMPTY_GROUP_STATE: { members: GroupMember[]; plans: SharedPlan[] } = {
-  members: [],
-  plans: [],
-};
-
 function formatMemberSince(createdAt?: string | null) {
   if (!createdAt) return "2026";
 
@@ -339,13 +292,19 @@ export default function ProfileScreen() {
   const [editPhone, setEditPhone] = useState("");
   const [bookingTab, setBookingTab] = useState("Upcoming");
   const [walletPreviewState, setWalletPreviewState] = useState<"active" | "empty">("active");
-  const [groupPreviewState, setGroupPreviewState] = useState<"active" | "empty">("active");
-  const [createdPlans, setCreatedPlans] = useState<SharedPlan[]>([]);
+  const [circleMembers, setCircleMembers] = useState<CircleMember[]>([]);
+  const [circleRequests, setCircleRequests] = useState<CircleRequest[]>([]);
+  const [sharedPaymentPlans, setSharedPaymentPlans] = useState<SharedPaymentPlan[]>([]);
+  const [circleLoading, setCircleLoading] = useState(false);
+  const [circleSearchId, setCircleSearchId] = useState("");
+  const [circleSearchResult, setCircleSearchResult] = useState<PublicCircleProfile | null>(null);
+  const [circleSearchState, setCircleSearchState] = useState<"idle" | "loading" | "found" | "empty">("idle");
+  const [circleActionBusy, setCircleActionBusy] = useState<string | null>(null);
   const [planName, setPlanName] = useState("House Party Split");
   const [planAmount, setPlanAmount] = useState("12000");
   const [planSplitType, setPlanSplitType] = useState<"equal" | "custom">("equal");
   const [planThreshold, setPlanThreshold] = useState(3);
-  const [selectedPlanMembers, setSelectedPlanMembers] = useState<string[]>(mockMembers.slice(0, 3).map((member) => member.id));
+  const [selectedPlanMembers, setSelectedPlanMembers] = useState<string[]>([]);
   const [toastMessage, setToastMessage] = useState("");
   const [logoutSheetOpen, setLogoutSheetOpen] = useState(false);
   const [addPaySheetOpen, setAddPaySheetOpen] = useState(false);
@@ -367,9 +326,10 @@ export default function ProfileScreen() {
   const profileCity = profile?.city?.trim() || city;
   const memberSince = formatMemberSince(profile?.created_at);
   const wallet = walletPreviewState === "active" ? mockWallet : emptyMockWallet;
-  const members = groupPreviewState === "active" ? mockMembers : EMPTY_GROUP_STATE.members;
-  const sharedPlans = groupPreviewState === "active" ? [...createdPlans, ...mockSharedPlans] : EMPTY_GROUP_STATE.plans;
-  const partialPlan = sharedPlans.find((plan) => plan.status === "collecting" || plan.status === "threshold_pending");
+  const momentraId = profile?.momentra_id || (profile?.id ? makeFallbackMomentraId(profile.id) : "MOM-LOADING");
+  const incomingRequests = circleRequests.filter((request) => request.receiver_profile_id === profile?.id && request.status === "pending");
+  const sentRequests = circleRequests.filter((request) => request.requester_profile_id === profile?.id);
+  const activeSharedPlan = sharedPaymentPlans.find((plan) => plan.status === "collecting" || plan.status === "threshold_pending");
   const initials = displayName
     .split(" ")
     .map((part) => part[0])
@@ -406,6 +366,34 @@ export default function ProfileScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
+  useEffect(() => {
+    if (!profile?.id) return;
+
+    void refreshCircleData(profile.id);
+
+    const channel = supabase
+      .channel(`momentra-circle-${profile.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profile_circle_requests" }, () => {
+        void refreshCircleData(profile.id);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "profile_circle_members" }, () => {
+        void refreshCircleData(profile.id);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "shared_payment_plans" }, () => {
+        void refreshCircleData(profile.id);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "shared_payment_members" }, () => {
+        void refreshCircleData(profile.id);
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+    // refreshCircleData intentionally reads current setters and toast helper.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+
   function showToast(message: string) {
     setToastMessage(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -439,8 +427,93 @@ export default function ProfileScreen() {
     );
   }
 
+  async function refreshCircleData(profileId = profile?.id) {
+    if (!profileId) return;
+
+    setCircleLoading(true);
+    try {
+      const [requests, membersList, plans] = await Promise.all([
+        listCircleRequests(profileId),
+        listCircleMembers(profileId),
+        listSharedPaymentPlans(profileId),
+      ]);
+
+      setCircleRequests(requests);
+      setCircleMembers(membersList);
+      setSharedPaymentPlans(plans);
+    } catch (error) {
+      console.error("[Momentra circle] refresh failed", error);
+      showToast("We could not refresh your Circle.");
+    } finally {
+      setCircleLoading(false);
+    }
+  }
+
+  async function copyMomentraId() {
+    await Clipboard.setStringAsync(momentraId);
+    showToast("Momentra ID copied");
+  }
+
+  async function searchCircleProfile() {
+    const normalized = normalizeMomentraId(circleSearchId);
+    if (!normalized) {
+      showToast("Enter a Momentra ID first.");
+      return;
+    }
+
+    setCircleSearchState("loading");
+    setCircleSearchResult(null);
+
+    try {
+      const result = await searchProfileByMomentraId(normalized);
+      setCircleSearchResult(result);
+      setCircleSearchState(result ? "found" : "empty");
+    } catch (error) {
+      console.error("[Momentra circle] search failed", error);
+      setCircleSearchState("empty");
+      showToast("Search failed. Please try again.");
+    }
+  }
+
+  async function sendCircleInvite() {
+    if (!profile?.id || !circleSearchResult?.momentra_id) return;
+
+    setCircleActionBusy("send");
+    try {
+      await sendCircleRequest(profile.id, circleSearchResult.momentra_id);
+      setCircleSearchResult(null);
+      setCircleSearchId("");
+      setCircleSearchState("idle");
+      await refreshCircleData(profile.id);
+      showToast("Circle request sent");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not send request.");
+    } finally {
+      setCircleActionBusy(null);
+    }
+  }
+
+  async function respondToRequest(requestId: string, action: "accept" | "decline") {
+    if (!profile?.id) return;
+
+    setCircleActionBusy(requestId);
+    try {
+      await respondToCircleRequest(requestId, profile.id, action);
+      await refreshCircleData(profile.id);
+      showToast(action === "accept" ? "Added to your Circle" : "Request declined");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not update request.");
+    } finally {
+      setCircleActionBusy(null);
+    }
+  }
+
   function createSharedPlan() {
     const amount = Number.parseInt(planAmount.replace(/[^\d]/g, ""), 10) || 0;
+    if (!profile?.id) {
+      showToast("Profile is still loading.");
+      return;
+    }
     if (!planName.trim()) {
       showToast("Add an event name first.");
       return;
@@ -454,20 +527,23 @@ export default function ProfileScreen() {
       return;
     }
 
-    const nextPlan: SharedPlan = {
-      eventName: planName.trim(),
-      id: `mock-plan-${Date.now()}`,
-      memberIds: selectedPlanMembers,
-      paidMemberIds: [],
+    setCircleActionBusy("create-plan");
+    createSharedPaymentPlan(profile.id, selectedPlanMembers, {
       splitType: planSplitType,
-      status: "threshold_pending",
-      threshold: Math.min(planThreshold, selectedPlanMembers.length),
+      threshold: planThreshold,
+      title: planName.trim(),
       totalAmount: amount,
-    };
-
-    setCreatedPlans((current) => [nextPlan, ...current]);
-    setActiveScreen("groups");
-    showToast("Mock shared plan created");
+    })
+      .then(async () => {
+        setSelectedPlanMembers([]);
+        setActiveScreen("groups");
+        await refreshCircleData(profile.id);
+        showToast("Shared plan created");
+      })
+      .catch((error) => {
+        showToast(error instanceof Error ? error.message : "Could not create shared plan.");
+      })
+      .finally(() => setCircleActionBusy(null));
   }
 
   async function loadCustomerProfile(firebaseUser: User) {
@@ -606,8 +682,20 @@ export default function ProfileScreen() {
           <View style={styles.stats}>
             <Stat label="Bookings" value="3" onPress={() => openScreen("bookings")} styles={styles} />
             <Stat label="Saved" value="5" onPress={() => openScreen("saved")} styles={styles} />
-            <Stat label="Status" value="New" small onPress={() => showToast("Your Momentra profile is active")} styles={styles} />
+            <Stat label="Circle" value={String(circleMembers.length)} onPress={() => openScreen("groups")} styles={styles} />
+            <Stat label="Requests" value={String(incomingRequests.length)} small green={incomingRequests.length > 0} onPress={() => openScreen("groups")} styles={styles} />
             <Stat label="Session" value="● Live" small green onPress={() => showToast("You are signed in")} styles={styles} />
+          </View>
+
+          <View style={styles.momentraIdCard}>
+            <View style={styles.rowBody}>
+              <Text style={styles.inlineEyebrow}>My Momentra ID</Text>
+              <Text style={styles.momentraIdText}>{momentraId}</Text>
+              <Text style={styles.rowSubtitle}>Share this ID with friends so they can send a Circle request.</Text>
+            </View>
+            <Pressable onPress={copyMomentraId} style={styles.copyIdButton}>
+              <Text style={styles.copyIdText}>Copy</Text>
+            </Pressable>
           </View>
 
           <Section title="Momentra Credits" styles={styles}>
@@ -622,11 +710,12 @@ export default function ProfileScreen() {
 
           <Section title="My Circle" styles={styles}>
             <SharedPlanPreview
-              members={members}
+              incomingCount={incomingRequests.length}
+              members={circleMembers}
               onCreate={() => openScreen("createPlan")}
               onOpen={() => openScreen("groups")}
-              plan={partialPlan}
-              plansCount={sharedPlans.length}
+              plan={activeSharedPlan}
+              plansCount={sharedPaymentPlans.length}
               styles={styles}
               T={T}
             />
@@ -942,38 +1031,115 @@ export default function ProfileScreen() {
   function renderGroups() {
     return (
       <View>
-        <View style={styles.previewSwitch}>
-          {["active", "empty"].map((state) => (
-            <Pressable
-              key={state}
-              onPress={() => setGroupPreviewState(state as "active" | "empty")}
-              style={[styles.previewChip, groupPreviewState === state && styles.previewChipOn]}
-            >
-              <Text style={[styles.previewChipText, groupPreviewState === state && styles.previewChipTextOn]}>
-                {state === "active" ? "Members & plans" : "No members"}
-              </Text>
-            </Pressable>
-          ))}
+        <View style={styles.momentraIdCard}>
+          <View style={styles.rowBody}>
+            <Text style={styles.inlineEyebrow}>My Momentra ID</Text>
+            <Text style={styles.momentraIdText}>{momentraId}</Text>
+            <Text style={styles.rowSubtitle}>Share this ID with friends so they can search and request to join your Circle.</Text>
+          </View>
+          <Pressable onPress={copyMomentraId} style={styles.copyIdButton}>
+            <Text style={styles.copyIdText}>Copy</Text>
+          </Pressable>
+        </View>
+        {circleLoading ? <Text style={styles.backendNote}>Refreshing your Circle...</Text> : null}
+
+        <SectionLabel label="Find a Profile" styles={styles} />
+        <View style={styles.circleSearchCard}>
+          <TextInput
+            autoCapitalize="characters"
+            onChangeText={(value) => {
+              setCircleSearchId(value);
+              setCircleSearchState("idle");
+              setCircleSearchResult(null);
+            }}
+            placeholder="Enter Momentra ID, for example MOM-1A2B3C4D"
+            placeholderTextColor={T.text3}
+            style={styles.searchInput}
+            value={circleSearchId}
+          />
+          <Pressable onPress={searchCircleProfile} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
+            <Text style={styles.saveText}>{circleSearchState === "loading" ? "Searching..." : "Search Profile"}</Text>
+          </Pressable>
+          {circleSearchState === "found" && circleSearchResult ? (
+            <CircleProfileResult
+              currentProfileId={profile?.id}
+              onSend={sendCircleInvite}
+              profile={circleSearchResult}
+              sending={circleActionBusy === "send"}
+              styles={styles}
+            />
+          ) : null}
+          {circleSearchState === "empty" ? (
+            <Text style={styles.backendNote}>No Momentra profile found with that ID.</Text>
+          ) : null}
         </View>
 
+        <SectionLabel label="Incoming Requests" styles={styles} />
+        {incomingRequests.length ? (
+          <View style={styles.group}>
+            {incomingRequests.map((request) => (
+              <CircleRequestRow
+                busy={circleActionBusy === request.id}
+                key={request.id}
+                onAccept={() => respondToRequest(request.id, "accept")}
+                onDecline={() => respondToRequest(request.id, "decline")}
+                request={request}
+                side="incoming"
+                styles={styles}
+              />
+            ))}
+          </View>
+        ) : (
+          <EmptyProfileState
+            action="Refresh"
+            body="Requests from friends who searched your Momentra ID will appear here."
+            onPress={() => refreshCircleData()}
+            styles={styles}
+            title="No incoming requests"
+          />
+        )}
+
+        <SectionLabel label="Sent Requests" styles={styles} />
+        {sentRequests.length ? (
+          <View style={styles.group}>
+            {sentRequests.map((request) => (
+              <CircleRequestRow
+                busy={false}
+                key={request.id}
+                request={request}
+                side="sent"
+                styles={styles}
+              />
+            ))}
+          </View>
+        ) : (
+          <EmptyProfileState
+            action="Search profiles"
+            body="Search a friend’s Momentra ID and send a request to start planning together."
+            onPress={() => showToast("Enter a Momentra ID above.")}
+            styles={styles}
+            title="No sent requests"
+          />
+        )}
+
         <SectionLabel label="Circle Members" styles={styles} />
-        {members.length ? (
+        {circleMembers.length ? (
           <View style={styles.circleHeroCard}>
             <View>
               <Text style={styles.circleHeroEyebrow}>Momentra circle</Text>
-              <Text style={styles.circleHeroTitle}>Celebration Guild</Text>
-              <Text style={styles.circleHeroSub}>{members.length} trusted members for shared plans and quick invites.</Text>
+              <Text style={styles.circleHeroTitle}>My Circle</Text>
+              <Text style={styles.circleHeroSub}>{circleMembers.length} trusted member{circleMembers.length === 1 ? "" : "s"} for shared plans and quick invites.</Text>
             </View>
             <View style={styles.circleHeroBadge}>
-              <Text style={styles.circleHeroBadgeText}>{sharedPlans.length}</Text>
+              <Text style={styles.circleHeroBadgeText}>{sharedPaymentPlans.length}</Text>
               <Text style={styles.circleHeroBadgeLabel}>plans</Text>
             </View>
           </View>
         ) : null}
-        {members.length ? (
+        {circleMembers.length ? (
           <View style={styles.memberStrip}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {members.map((member) => (
+              {circleMembers.map((member) => (
                 <MemberBubble key={member.id} member={member} styles={styles} />
               ))}
             </ScrollView>
@@ -981,22 +1147,22 @@ export default function ProfileScreen() {
         ) : (
           <EmptyProfileState
             action="Add members later"
-            body="Saved friends and family will be reusable when creating shared payment plans."
-            onPress={() => showToast("Member invite mock coming soon")}
+            body="Accepted Circle members will appear here after someone accepts your request or you accept theirs."
+            onPress={() => showToast("Search a Momentra ID above.")}
             styles={styles}
             title="No saved members yet"
           />
         )}
 
         <SectionLabel label="Circle Plans" styles={styles} />
-        {sharedPlans.length ? (
-          sharedPlans.map((plan) => (
-            <SharedPlanCard key={plan.id} members={members} plan={plan} styles={styles} T={T} showToast={showToast} />
+        {sharedPaymentPlans.length ? (
+          sharedPaymentPlans.map((plan) => (
+            <SharedPlanCard key={plan.id} plan={plan} styles={styles} T={T} showToast={showToast} />
           ))
         ) : (
           <EmptyProfileState
             action="Create shared plan"
-            body="Create a circle plan with members, split style, and minimum payments needed to confirm."
+            body="Create a plan with your Circle members, split style, and minimum payments needed to confirm."
             onPress={() => openScreen("createPlan")}
             styles={styles}
             title="No shared plans yet"
@@ -1013,8 +1179,9 @@ export default function ProfileScreen() {
 
   function renderCreateSharedPlan() {
     const amount = Number.parseInt(planAmount.replace(/[^\d]/g, ""), 10) || 0;
-    const selectedMembers = members.filter((member) => selectedPlanMembers.includes(member.id));
-    const perHead = selectedMembers.length ? Math.ceil(amount / selectedMembers.length) : 0;
+    const selectedMembers = circleMembers.filter((member) => selectedPlanMembers.includes(member.member_profile_id));
+    const participantCount = selectedMembers.length + (profile?.id ? 1 : 0);
+    const perHead = participantCount ? Math.ceil(amount / participantCount) : 0;
 
     return (
       <View>
@@ -1022,23 +1189,34 @@ export default function ProfileScreen() {
         <Field keyboardType="phone-pad" label="Total Amount" onChangeText={setPlanAmount} styles={styles} value={planAmount} />
 
         <SectionLabel label="Members" styles={styles} />
-        <View style={styles.group}>
-          {members.map((member) => {
-            const selected = selectedPlanMembers.includes(member.id);
+        {circleMembers.length ? (
+          <View style={styles.group}>
+            {circleMembers.map((member) => {
+            const selected = selectedPlanMembers.includes(member.member_profile_id);
+            const memberProfile = member.member;
             return (
-              <Pressable key={member.id} onPress={() => togglePlanMember(member.id)} style={({ pressed }) => [styles.memberSelectRow, pressed && styles.pressed]}>
+              <Pressable key={member.id} onPress={() => togglePlanMember(member.member_profile_id)} style={({ pressed }) => [styles.memberSelectRow, pressed && styles.pressed]}>
                 <View style={[styles.memberAvatar, selected && styles.memberAvatarOn]}>
-                  <Text style={styles.memberAvatarText}>{member.name[0]}</Text>
+                  <Text style={styles.memberAvatarText}>{profileInitial(memberProfile)}</Text>
                 </View>
                 <View style={styles.rowBody}>
-                  <Text style={styles.rowTitle}>{member.name}</Text>
-                  <Text style={styles.rowSubtitle}>{member.phone}</Text>
+                  <Text style={styles.rowTitle}>{profileDisplayName(memberProfile)}</Text>
+                  <Text style={styles.rowSubtitle}>{memberProfile?.momentra_id || "Momentra member"}</Text>
                 </View>
                 <View style={[styles.radio, selected && styles.radioOn]} />
               </Pressable>
             );
           })}
-        </View>
+          </View>
+        ) : (
+          <EmptyProfileState
+            action="Open My Circle"
+            body="Add at least one Circle member before creating a shared plan."
+            onPress={() => openScreen("groups")}
+            styles={styles}
+            title="No Circle members yet"
+          />
+        )}
 
         <SectionLabel label="Split Type" styles={styles} />
         <View style={styles.splitChoiceRow}>
@@ -1053,12 +1231,12 @@ export default function ProfileScreen() {
         <SectionLabel label="Minimum to Confirm" styles={styles} />
         <View style={styles.thresholdProfileCard}>
           <Text style={styles.thresholdProfileCopy}>
-            Confirm when at least {Math.min(planThreshold, selectedMembers.length || 1)} of {selectedMembers.length || 1} members pay. If threshold is not reached, the plan stays pending.
+            Confirm when at least {Math.min(planThreshold, participantCount || 1)} of {participantCount || 1} participants pay. If threshold is not reached, the plan stays pending.
           </Text>
           <View style={styles.thresholdControls}>
             <Pressable onPress={() => setPlanThreshold((value) => Math.max(1, value - 1))} style={styles.thresholdButton}><Text style={styles.thresholdButtonText}>-</Text></Pressable>
-            <Text style={styles.thresholdNumber}>{Math.min(planThreshold, selectedMembers.length || 1)}</Text>
-            <Pressable onPress={() => setPlanThreshold((value) => Math.min(selectedMembers.length || 1, value + 1))} style={styles.thresholdButton}><Text style={styles.thresholdButtonText}>+</Text></Pressable>
+            <Text style={styles.thresholdNumber}>{Math.min(planThreshold, participantCount || 1)}</Text>
+            <Pressable onPress={() => setPlanThreshold((value) => Math.min(participantCount || 1, value + 1))} style={styles.thresholdButton}><Text style={styles.thresholdButtonText}>+</Text></Pressable>
           </View>
         </View>
 
@@ -1066,13 +1244,13 @@ export default function ProfileScreen() {
         <View style={styles.reviewPlanCard}>
           <ReviewLine label="Plan" value={planName || "Untitled plan"} styles={styles} />
           <ReviewLine label="Total" value={formatMockINR(amount)} styles={styles} />
-          <ReviewLine label="Members" value={`${selectedMembers.length} selected`} styles={styles} />
+          <ReviewLine label="Participants" value={`${participantCount} including you`} styles={styles} />
           <ReviewLine label="Split" value={planSplitType === "equal" ? `${formatMockINR(perHead)} each` : "Custom split mock"} styles={styles} />
-          <ReviewLine label="Threshold" value={`${Math.min(planThreshold, selectedMembers.length || 1)} payments`} styles={styles} />
+          <ReviewLine label="Threshold" value={`${Math.min(planThreshold, participantCount || 1)} payments`} styles={styles} />
         </View>
 
         <Pressable onPress={createSharedPlan} style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
-          <Text style={styles.saveText}>Create Mock Shared Plan</Text>
+          <Text style={styles.saveText}>{circleActionBusy === "create-plan" ? "Creating..." : "Create Shared Plan"}</Text>
         </Pressable>
       </View>
     );
@@ -1287,6 +1465,7 @@ function WalletSummaryCard({
 }
 
 function SharedPlanPreview({
+  incomingCount,
   members,
   onCreate,
   onOpen,
@@ -1294,16 +1473,17 @@ function SharedPlanPreview({
   plansCount,
   styles,
 }: {
-  members: GroupMember[];
+  incomingCount: number;
+  members: CircleMember[];
   onCreate: () => void;
   onOpen: () => void;
-  plan?: SharedPlan;
+  plan?: SharedPaymentPlan;
   plansCount: number;
   styles: ReturnType<typeof createStyles>;
   T: Palette;
 }) {
-  const paid = plan?.paidMemberIds.length ?? 0;
-  const invited = plan?.memberIds.length ?? members.length;
+  const paid = plan?.members.filter((member) => member.status === "paid").length ?? 0;
+  const invited = plan?.members.length ?? members.length;
   const pending = Math.max(invited - paid, 0);
 
   return (
@@ -1311,22 +1491,22 @@ function SharedPlanPreview({
       <View style={styles.inlineGroupTop}>
         <View>
           <Text style={styles.inlineEyebrow}>My circle</Text>
-          <Text style={styles.inlineGroupTitle}>{plan ? "Celebration Guild" : "Create your circle"}</Text>
+          <Text style={styles.inlineGroupTitle}>{members.length ? "My Circle" : "Create your Circle"}</Text>
           <Text style={styles.inlineGroupSub}>
-            {plan ? `${members.length} members · ${paid}/${invited} paid · ${pending} pending` : `${members.length} members · ${plansCount} plans`}
+            {plan ? `${members.length} members · ${paid}/${invited} paid · ${pending} pending` : `${members.length} members · ${plansCount} plans · ${incomingCount} requests`}
           </Text>
         </View>
         <View style={styles.memberStack}>
           {members.slice(0, 3).map((member) => (
             <View key={member.id} style={styles.memberStackAvatar}>
-              <Text style={styles.memberStackText}>{member.name[0]}</Text>
+              <Text style={styles.memberStackText}>{profileInitial(member.member)}</Text>
             </View>
           ))}
         </View>
       </View>
       {plan ? (
         <View style={styles.circleMission}>
-          <Text style={styles.circleMissionTitle}>{plan.eventName}</Text>
+          <Text style={styles.circleMissionTitle}>{plan.title}</Text>
           <Text style={styles.circleMissionText}>Needs {plan.threshold} payments to confirm this celebration.</Text>
           <View style={styles.planProgressTrack}>
             <View style={[styles.planProgressFill, { width: `${invited ? Math.round((paid / invited) * 100) : 0}%` }]} />
@@ -1361,48 +1541,43 @@ function WalletTransactionRow({ styles, transaction }: { styles: ReturnType<type
   );
 }
 
-function MemberBubble({ member, styles }: { member: GroupMember; styles: ReturnType<typeof createStyles> }) {
-  const role = member.status === "paid" ? "Ready" : member.status === "pending" ? "Pending" : member.status === "invited" ? "Invited" : "Member";
-
+function MemberBubble({ member, styles }: { member: CircleMember; styles: ReturnType<typeof createStyles> }) {
   return (
     <View style={styles.memberBubble}>
       <View style={styles.memberAvatar}>
-        <Text style={styles.memberAvatarText}>{member.name[0]}</Text>
+        <Text style={styles.memberAvatarText}>{profileInitial(member.member)}</Text>
       </View>
-      <Text style={styles.memberName} numberOfLines={1}>{member.name}</Text>
-      <Text style={styles.memberStatus}>{role}</Text>
+      <Text style={styles.memberName} numberOfLines={1}>{profileDisplayName(member.member)}</Text>
+      <Text style={styles.memberStatus}>{member.member?.momentra_id || "Member"}</Text>
     </View>
   );
 }
 
 function SharedPlanCard({
-  members,
   plan,
   showToast,
   styles,
   T,
 }: {
-  members: GroupMember[];
-  plan: SharedPlan;
+  plan: SharedPaymentPlan;
   showToast: (message: string) => void;
   styles: ReturnType<typeof createStyles>;
   T: Palette;
 }) {
-  const paid = plan.paidMemberIds.length;
-  const invited = plan.memberIds.length;
+  const paid = plan.members.filter((member) => member.status === "paid").length;
+  const invited = plan.members.length;
   const pending = Math.max(invited - paid, 0);
-  const perHead = invited ? Math.ceil(plan.totalAmount / invited) : plan.totalAmount;
+  const perHead = invited ? Math.ceil(plan.total_amount / invited) : plan.total_amount;
   const reached = paid >= plan.threshold;
-  const selectedMembers = members.filter((member) => plan.memberIds.includes(member.id));
 
   return (
-    <Pressable onPress={() => showToast("Mock tracker details")} style={({ pressed }) => [styles.sharedPlanCard, pressed && styles.pressed]}>
+    <Pressable onPress={() => showToast("Shared plan tracker is live in My Circle.")} style={({ pressed }) => [styles.sharedPlanCard, pressed && styles.pressed]}>
       <View style={styles.sharedPlanTop}>
         <View>
-          <Text style={styles.inlineEyebrow}>Circle mission</Text>
-          <Text style={styles.sharedPlanTitle}>{plan.eventName}</Text>
+          <Text style={styles.inlineEyebrow}>Shared plan</Text>
+          <Text style={styles.sharedPlanTitle}>{plan.title}</Text>
           <Text style={styles.sharedPlanSub}>
-            {plan.splitType} split · {formatMockINR(perHead)} per member · needs {plan.threshold} payments
+            {plan.split_type} split · {formatMockINR(perHead)} per participant · needs {plan.threshold} payments
           </Text>
         </View>
         <Pill label={planStatusLabel(plan, reached)} tone={reached ? "green" : "gold"} T={T} styles={styles} />
@@ -1414,14 +1589,14 @@ function SharedPlanCard({
         <PlanMetric label="Paid" value={`${paid}`} styles={styles} />
         <PlanMetric label="Pending" value={`${pending}`} styles={styles} />
         <PlanMetric label="Threshold" value={`${plan.threshold}`} styles={styles} />
-        <PlanMetric label="Total" value={formatMockINR(plan.totalAmount)} styles={styles} />
+        <PlanMetric label="Total" value={formatMockINR(plan.total_amount)} styles={styles} />
       </View>
       <Text style={styles.circleStatusLine}>
         {reached ? "Circle is ready to confirm." : `${Math.max(plan.threshold - paid, 0)} more payment${Math.max(plan.threshold - paid, 0) === 1 ? "" : "s"} needed to confirm.`}
       </Text>
       <View style={styles.planMembersLine}>
-        {selectedMembers.slice(0, 4).map((member) => (
-          <Text key={member.id} style={styles.planMemberPill}>{member.name.split(" ")[0]}</Text>
+        {plan.members.slice(0, 4).map((member) => (
+          <Text key={member.id} style={styles.planMemberPill}>{profileFirstName(member.profile)}</Text>
         ))}
       </View>
     </Pressable>
@@ -1474,6 +1649,95 @@ function formatMockINR(value: number) {
   return `₹${value.toLocaleString("en-IN")}`;
 }
 
+function CircleProfileResult({
+  currentProfileId,
+  onSend,
+  profile,
+  sending,
+  styles,
+}: {
+  currentProfileId?: string;
+  onSend: () => void;
+  profile: PublicCircleProfile;
+  sending: boolean;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const isSelf = currentProfileId === profile.id;
+
+  return (
+    <View style={styles.circleResultCard}>
+      <View style={styles.memberAvatar}>
+        <Text style={styles.memberAvatarText}>{profileInitial(profile)}</Text>
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowTitle}>{profileDisplayName(profile)}</Text>
+        <Text style={styles.rowSubtitle}>{profile.momentra_id} · {profile.city || "City not added"}</Text>
+      </View>
+      <Pressable disabled={isSelf || sending} onPress={onSend} style={[styles.requestAction, (isSelf || sending) && styles.disabled]}>
+        <Text style={styles.requestActionText}>{isSelf ? "You" : sending ? "Sending" : "Send Request"}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function CircleRequestRow({
+  busy,
+  onAccept,
+  onDecline,
+  request,
+  side,
+  styles,
+}: {
+  busy: boolean;
+  onAccept?: () => void;
+  onDecline?: () => void;
+  request: CircleRequest;
+  side: "incoming" | "sent";
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const otherProfile = side === "incoming" ? request.requester : request.receiver;
+
+  return (
+    <View style={styles.circleRequestRow}>
+      <View style={styles.memberAvatar}>
+        <Text style={styles.memberAvatarText}>{profileInitial(otherProfile)}</Text>
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowTitle}>{profileDisplayName(otherProfile)}</Text>
+        <Text style={styles.rowSubtitle}>{otherProfile?.momentra_id || "Momentra profile"} · {request.status}</Text>
+      </View>
+      {side === "incoming" && request.status === "pending" ? (
+        <View style={styles.requestButtons}>
+          <Pressable disabled={busy} onPress={onDecline} style={[styles.requestGhost, busy && styles.disabled]}>
+            <Text style={styles.requestGhostText}>Decline</Text>
+          </Pressable>
+          <Pressable disabled={busy} onPress={onAccept} style={[styles.requestAction, busy && styles.disabled]}>
+            <Text style={styles.requestActionText}>{busy ? "Saving" : "Accept"}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Text style={styles.requestStatusText}>{request.status}</Text>
+      )}
+    </View>
+  );
+}
+
+function makeFallbackMomentraId(profileId: string) {
+  return `MOM-${profileId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+}
+
+function profileDisplayName(profile?: PublicCircleProfile | null) {
+  return profile?.full_name?.trim() || "Momentra Customer";
+}
+
+function profileFirstName(profile?: PublicCircleProfile | null) {
+  return profileDisplayName(profile).split(" ")[0] || "Member";
+}
+
+function profileInitial(profile?: PublicCircleProfile | null) {
+  return profileDisplayName(profile).slice(0, 1).toUpperCase() || "M";
+}
+
 function walletTypeLabel(type: WalletTransactionType) {
   const labels: Record<WalletTransactionType, string> = {
     manual_credit: "MC",
@@ -1486,7 +1750,7 @@ function walletTypeLabel(type: WalletTransactionType) {
   return labels[type];
 }
 
-function planStatusLabel(plan: SharedPlan, thresholdReached: boolean) {
+function planStatusLabel(plan: SharedPaymentPlan, thresholdReached: boolean) {
   if (plan.status === "completed") return "Completed";
   if (thresholdReached) return "Threshold reached";
   if (plan.status === "threshold_pending") return "Threshold pending";
@@ -2113,6 +2377,39 @@ function createStyles(T: Palette) {
       letterSpacing: 1.8,
       marginTop: 4,
       textTransform: "uppercase",
+    },
+    momentraIdCard: {
+      alignItems: "center",
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginHorizontal: 12,
+      marginTop: 12,
+      padding: 15,
+    },
+    momentraIdText: {
+      color: T.gold2,
+      fontSize: 18,
+      fontWeight: "900",
+      letterSpacing: 1.2,
+    },
+    copyIdButton: {
+      alignItems: "center",
+      backgroundColor: "rgba(201,151,90,0.12)",
+      borderColor: "rgba(201,151,90,0.28)",
+      borderRadius: 12,
+      borderWidth: 1,
+      minWidth: 72,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    copyIdText: {
+      color: T.gold2,
+      fontSize: 12,
+      fontWeight: "900",
     },
     sectionLabel: {
       color: T.text3,
@@ -3210,6 +3507,68 @@ function createStyles(T: Palette) {
       marginHorizontal: 12,
       paddingHorizontal: 15,
       paddingVertical: 13,
+    },
+    circleSearchCard: {
+      marginBottom: 8,
+    },
+    circleResultCard: {
+      alignItems: "center",
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: "row",
+      gap: 12,
+      marginHorizontal: 12,
+      marginTop: 12,
+      padding: 14,
+    },
+    circleRequestRow: {
+      alignItems: "center",
+      borderBottomColor: T.border,
+      borderBottomWidth: 1,
+      flexDirection: "row",
+      gap: 13,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    requestButtons: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    requestAction: {
+      alignItems: "center",
+      backgroundColor: T.red,
+      borderRadius: 11,
+      justifyContent: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    requestActionText: {
+      color: "#fff",
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    requestGhost: {
+      alignItems: "center",
+      borderColor: T.border2,
+      borderRadius: 11,
+      borderWidth: 1,
+      justifyContent: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+    },
+    requestGhostText: {
+      color: T.gold2,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    requestStatusText: {
+      color: T.text3,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "capitalize",
     },
     cityRow: {
       alignItems: "center",

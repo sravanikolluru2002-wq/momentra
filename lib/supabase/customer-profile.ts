@@ -10,6 +10,7 @@ export type CustomerProfileRow = {
   full_name: string | null;
   id: string;
   last_login: string | null;
+  momentra_id: string | null;
   phone_number: string | null;
 };
 
@@ -36,7 +37,7 @@ type ProfilePayload = {
 };
 
 const PROFILE_TABLE = "profiles";
-const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login";
+const PROFILE_SELECT = "id,firebase_uid,phone_number,full_name,city,created_at,last_login,momentra_id";
 
 function isRecoverableProfileUpsertError(error: SupabaseProfileError) {
   return (
