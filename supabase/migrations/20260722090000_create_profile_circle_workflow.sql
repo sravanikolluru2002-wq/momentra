@@ -43,6 +43,16 @@ before insert on public.profiles
 for each row
 execute function public.set_profiles_momentra_id();
 
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 create table if not exists public.profile_circle_requests (
   id uuid primary key default gen_random_uuid(),
   requester_profile_id uuid not null references public.profiles(id) on delete cascade,
@@ -113,14 +123,14 @@ drop trigger if exists set_profile_circle_requests_updated_at on public.profile_
 create trigger set_profile_circle_requests_updated_at
 before update on public.profile_circle_requests
 for each row
-execute function public.set_profiles_updated_at();
+execute function public.set_updated_at();
 
 drop trigger if exists set_shared_payment_plans_updated_at on public.shared_payment_plans;
 
 create trigger set_shared_payment_plans_updated_at
 before update on public.shared_payment_plans
 for each row
-execute function public.set_profiles_updated_at();
+execute function public.set_updated_at();
 
 do $$
 begin
