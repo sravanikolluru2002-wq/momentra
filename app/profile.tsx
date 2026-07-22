@@ -610,17 +610,17 @@ export default function ProfileScreen() {
             <Stat label="Session" value="● Live" small green onPress={() => showToast("You are signed in")} styles={styles} />
           </View>
 
-          <Section title="Balance" styles={styles}>
+          <Section title="Momentra Credits" styles={styles}>
             <WalletSummaryCard
               onHistory={() => openScreen("credits")}
-              onUse={() => showToast(wallet.available ? "Credits will be offered at checkout." : "No credits available yet.")}
+              onUse={() => showToast(wallet.available ? "Credits can reduce your next booking or add-on bill." : "No credits available yet.")}
               styles={styles}
               T={T}
               wallet={wallet}
             />
           </Section>
 
-          <Section title="Groups & Shared Payments" styles={styles}>
+          <Section title="My Circle" styles={styles}>
             <SharedPlanPreview
               members={members}
               onCreate={() => openScreen("createPlan")}
@@ -692,8 +692,8 @@ export default function ProfileScreen() {
       edit: "Edit Profile",
       addresses: "Saved Addresses",
       payments: "Payment Methods",
-      credits: "Momentra Credits",
-      groups: "Shared Plans",
+      credits: "Event Credits",
+      groups: "My Circle",
       createPlan: "Create Shared Plan",
       notifications: "Notifications",
       city: "Select City",
@@ -878,14 +878,27 @@ export default function ProfileScreen() {
         <View style={styles.walletCard}>
           <View style={styles.walletTop}>
             <View>
-              <Text style={styles.walletLabel}>Momentra Credits</Text>
+              <Text style={styles.walletLabel}>Event credits</Text>
               <Text style={styles.walletAmount}>{formatMockINR(wallet.available)}</Text>
-              <Text style={styles.walletSub}>{wallet.expiring ? `${formatMockINR(wallet.expiring)} expires ${wallet.expiringOn}` : "No credits expiring"}</Text>
+              <Text style={styles.walletSub}>
+                Spend on venues, food, decor, music, add-ons, and planning upgrades.
+              </Text>
             </View>
             <View style={styles.walletIcon}>
-              <Text style={styles.walletIconText}>CR</Text>
+              <Text style={styles.walletIconText}>MC</Text>
             </View>
           </View>
+          <View style={styles.creditUseGrid}>
+            {["Venue booking", "Food menu", "Decor upgrade", "Refund credit"].map((item) => (
+              <Text key={item} style={styles.creditUsePill}>{item}</Text>
+            ))}
+          </View>
+          {wallet.expiring ? (
+            <View style={styles.expiryBanner}>
+              <Text style={styles.expiryBannerTitle}>{formatMockINR(wallet.expiring)} expiring soon</Text>
+              <Text style={styles.expiryBannerText}>Use before {wallet.expiringOn} on your next Momentra plan.</Text>
+            </View>
+          ) : null}
           <View style={styles.walletStatGrid}>
             {summary.map(([label, value, tone]) => (
               <View key={label} style={styles.walletMiniStat}>
@@ -904,7 +917,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <SectionLabel label="Transaction History" styles={styles} />
+        <SectionLabel label="Credit Activity" styles={styles} />
         {wallet.transactions.length ? (
           <View style={styles.group}>
             {wallet.transactions.map((transaction) => (
@@ -914,16 +927,14 @@ export default function ProfileScreen() {
         ) : (
           <EmptyProfileState
             action="Explore offers"
-            body="Credits from referrals, refunds, promos, and manual adjustments will appear here."
+            body="Credits from referrals, refunds, promos, and service adjustments will appear here."
             onPress={() => showToast("Offer discovery coming soon")}
             styles={styles}
             title="No credit activity yet"
           />
         )}
 
-        <Text style={styles.backendNote}>
-          Mock-only for now. Later this can connect to wallet_accounts and wallet_transactions keyed by profile id.
-        </Text>
+        <Text style={styles.backendNote}>Mock-only for local testing. Later this can connect to a credits ledger per profile.</Text>
       </View>
     );
   }
@@ -945,7 +956,20 @@ export default function ProfileScreen() {
           ))}
         </View>
 
-        <SectionLabel label="Saved Members" styles={styles} />
+        <SectionLabel label="Circle Members" styles={styles} />
+        {members.length ? (
+          <View style={styles.circleHeroCard}>
+            <View>
+              <Text style={styles.circleHeroEyebrow}>Momentra circle</Text>
+              <Text style={styles.circleHeroTitle}>Celebration Guild</Text>
+              <Text style={styles.circleHeroSub}>{members.length} trusted members for shared plans and quick invites.</Text>
+            </View>
+            <View style={styles.circleHeroBadge}>
+              <Text style={styles.circleHeroBadgeText}>{sharedPlans.length}</Text>
+              <Text style={styles.circleHeroBadgeLabel}>plans</Text>
+            </View>
+          </View>
+        ) : null}
         {members.length ? (
           <View style={styles.memberStrip}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -964,7 +988,7 @@ export default function ProfileScreen() {
           />
         )}
 
-        <SectionLabel label="Shared Plans" styles={styles} />
+        <SectionLabel label="Circle Plans" styles={styles} />
         {sharedPlans.length ? (
           sharedPlans.map((plan) => (
             <SharedPlanCard key={plan.id} members={members} plan={plan} styles={styles} T={T} showToast={showToast} />
@@ -972,7 +996,7 @@ export default function ProfileScreen() {
         ) : (
           <EmptyProfileState
             action="Create shared plan"
-            body="Create a mock split plan with saved members, equal/custom split, and a confirmation threshold."
+            body="Create a circle plan with members, split style, and minimum payments needed to confirm."
             onPress={() => openScreen("createPlan")}
             styles={styles}
             title="No shared plans yet"
@@ -980,8 +1004,8 @@ export default function ProfileScreen() {
         )}
 
         <Pressable onPress={() => openScreen("createPlan")} style={({ pressed }) => [styles.createPlanButton, pressed && styles.pressed]}>
-          <Text style={styles.createPlanText}>Create Shared Plan</Text>
-          <Text style={styles.createPlanSub}>Reuse Kitty split logic: total, members, paid/pending, threshold</Text>
+          <Text style={styles.createPlanText}>Create Circle Plan</Text>
+          <Text style={styles.createPlanSub}>Pick members, split the amount, and set how many payments confirm the celebration.</Text>
         </Pressable>
       </View>
     );
@@ -1232,12 +1256,18 @@ function WalletSummaryCard({
     <View style={styles.inlineWallet}>
       <View style={styles.inlineWalletTop}>
         <View>
-          <Text style={styles.inlineEyebrow}>Available balance</Text>
+          <Text style={styles.inlineEyebrow}>Event credits</Text>
           <Text style={styles.inlineWalletAmount}>{formatMockINR(wallet.available)}</Text>
+          <Text style={styles.inlineWalletSub}>Use credits for bookings, food, decor, music, or add-ons.</Text>
         </View>
         <View style={styles.inlineWalletToken}>
-          <Text style={styles.inlineWalletTokenText}>CR</Text>
+          <Text style={styles.inlineWalletTokenText}>MC</Text>
         </View>
+      </View>
+      <View style={styles.creditUseGrid}>
+        {["Booking", "Food", "Decor", "Add-ons"].map((item) => (
+          <Text key={item} style={styles.creditUsePill}>{item}</Text>
+        ))}
       </View>
       <View style={styles.inlineWalletStats}>
         <Text style={styles.inlineWalletStat}>Earned {formatMockINR(wallet.earned)}</Text>
@@ -1246,10 +1276,10 @@ function WalletSummaryCard({
       </View>
       <View style={styles.inlineActions}>
         <Pressable onPress={onUse} style={styles.inlinePrimary}>
-          <Text style={styles.inlinePrimaryText}>Use at checkout</Text>
+          <Text style={styles.inlinePrimaryText}>Use credits</Text>
         </Pressable>
         <Pressable onPress={onHistory} style={styles.inlineSecondary}>
-          <Text style={styles.inlineSecondaryText}>View history</Text>
+          <Text style={styles.inlineSecondaryText}>Credit history</Text>
         </Pressable>
       </View>
     </View>
@@ -1274,15 +1304,16 @@ function SharedPlanPreview({
 }) {
   const paid = plan?.paidMemberIds.length ?? 0;
   const invited = plan?.memberIds.length ?? members.length;
+  const pending = Math.max(invited - paid, 0);
 
   return (
     <View style={styles.inlineGroupCard}>
       <View style={styles.inlineGroupTop}>
         <View>
-          <Text style={styles.inlineEyebrow}>Shared plans</Text>
-          <Text style={styles.inlineGroupTitle}>{plan ? plan.eventName : "Start a group collection"}</Text>
+          <Text style={styles.inlineEyebrow}>My circle</Text>
+          <Text style={styles.inlineGroupTitle}>{plan ? "Celebration Guild" : "Create your circle"}</Text>
           <Text style={styles.inlineGroupSub}>
-            {plan ? `${paid}/${invited} paid · threshold ${plan.threshold}` : `${members.length} saved members · ${plansCount} plans`}
+            {plan ? `${members.length} members · ${paid}/${invited} paid · ${pending} pending` : `${members.length} members · ${plansCount} plans`}
           </Text>
         </View>
         <View style={styles.memberStack}>
@@ -1293,9 +1324,18 @@ function SharedPlanPreview({
           ))}
         </View>
       </View>
+      {plan ? (
+        <View style={styles.circleMission}>
+          <Text style={styles.circleMissionTitle}>{plan.eventName}</Text>
+          <Text style={styles.circleMissionText}>Needs {plan.threshold} payments to confirm this celebration.</Text>
+          <View style={styles.planProgressTrack}>
+            <View style={[styles.planProgressFill, { width: `${invited ? Math.round((paid / invited) * 100) : 0}%` }]} />
+          </View>
+        </View>
+      ) : null}
       <View style={styles.inlineActions}>
         <Pressable onPress={onOpen} style={styles.inlinePrimary}>
-          <Text style={styles.inlinePrimaryText}>Open plans</Text>
+          <Text style={styles.inlinePrimaryText}>Open circle</Text>
         </Pressable>
         <Pressable onPress={onCreate} style={styles.inlineSecondary}>
           <Text style={styles.inlineSecondaryText}>Create plan</Text>
@@ -1322,13 +1362,15 @@ function WalletTransactionRow({ styles, transaction }: { styles: ReturnType<type
 }
 
 function MemberBubble({ member, styles }: { member: GroupMember; styles: ReturnType<typeof createStyles> }) {
+  const role = member.status === "paid" ? "Ready" : member.status === "pending" ? "Pending" : member.status === "invited" ? "Invited" : "Member";
+
   return (
     <View style={styles.memberBubble}>
       <View style={styles.memberAvatar}>
         <Text style={styles.memberAvatarText}>{member.name[0]}</Text>
       </View>
       <Text style={styles.memberName} numberOfLines={1}>{member.name}</Text>
-      <Text style={styles.memberStatus}>{member.status}</Text>
+      <Text style={styles.memberStatus}>{role}</Text>
     </View>
   );
 }
@@ -1357,8 +1399,11 @@ function SharedPlanCard({
     <Pressable onPress={() => showToast("Mock tracker details")} style={({ pressed }) => [styles.sharedPlanCard, pressed && styles.pressed]}>
       <View style={styles.sharedPlanTop}>
         <View>
+          <Text style={styles.inlineEyebrow}>Circle mission</Text>
           <Text style={styles.sharedPlanTitle}>{plan.eventName}</Text>
-          <Text style={styles.sharedPlanSub}>{plan.splitType} split · {formatMockINR(perHead)} per member</Text>
+          <Text style={styles.sharedPlanSub}>
+            {plan.splitType} split · {formatMockINR(perHead)} per member · needs {plan.threshold} payments
+          </Text>
         </View>
         <Pill label={planStatusLabel(plan, reached)} tone={reached ? "green" : "gold"} T={T} styles={styles} />
       </View>
@@ -1371,6 +1416,9 @@ function SharedPlanCard({
         <PlanMetric label="Threshold" value={`${plan.threshold}`} styles={styles} />
         <PlanMetric label="Total" value={formatMockINR(plan.totalAmount)} styles={styles} />
       </View>
+      <Text style={styles.circleStatusLine}>
+        {reached ? "Circle is ready to confirm." : `${Math.max(plan.threshold - paid, 0)} more payment${Math.max(plan.threshold - paid, 0) === 1 ? "" : "s"} needed to confirm.`}
+      </Text>
       <View style={styles.planMembersLine}>
         {selectedMembers.slice(0, 4).map((member) => (
           <Text key={member.id} style={styles.planMemberPill}>{member.name.split(" ")[0]}</Text>
@@ -2436,6 +2484,13 @@ function createStyles(T: Palette) {
       fontSize: 34,
       lineHeight: 36,
     },
+    inlineWalletSub: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 4,
+      maxWidth: 420,
+    },
     inlineWalletToken: {
       alignItems: "center",
       backgroundColor: "rgba(201,151,90,0.11)",
@@ -2467,6 +2522,42 @@ function createStyles(T: Palette) {
       fontWeight: "700",
       paddingHorizontal: 10,
       paddingVertical: 6,
+    },
+    creditUseGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 14,
+    },
+    creditUsePill: {
+      backgroundColor: "rgba(201,151,90,0.10)",
+      borderColor: "rgba(201,151,90,0.22)",
+      borderRadius: 999,
+      borderWidth: 1,
+      color: T.gold2,
+      fontSize: 11,
+      fontWeight: "800",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    expiryBanner: {
+      backgroundColor: "rgba(192,57,43,0.10)",
+      borderColor: "rgba(192,57,43,0.26)",
+      borderRadius: 14,
+      borderWidth: 1,
+      marginBottom: 14,
+      padding: 12,
+    },
+    expiryBannerTitle: {
+      color: T.text,
+      fontSize: 13,
+      fontWeight: "900",
+      marginBottom: 3,
+    },
+    expiryBannerText: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 17,
     },
     inlineActions: {
       flexDirection: "row",
@@ -2529,6 +2620,26 @@ function createStyles(T: Palette) {
       color: T.text3,
       fontSize: 12,
       lineHeight: 18,
+    },
+    circleMission: {
+      backgroundColor: "rgba(201,151,90,0.075)",
+      borderColor: "rgba(201,151,90,0.18)",
+      borderRadius: 14,
+      borderWidth: 1,
+      marginBottom: 14,
+      padding: 12,
+    },
+    circleMissionTitle: {
+      color: T.text,
+      fontSize: 14,
+      fontWeight: "900",
+      marginBottom: 3,
+    },
+    circleMissionText: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 17,
+      marginBottom: 9,
     },
     memberStack: {
       flexDirection: "row",
@@ -2650,6 +2761,60 @@ function createStyles(T: Palette) {
       marginBottom: 12,
       marginHorizontal: 12,
     },
+    circleHeroCard: {
+      alignItems: "center",
+      backgroundColor: T.card,
+      borderColor: T.border,
+      borderRadius: 18,
+      borderWidth: 1,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 12,
+      marginHorizontal: 12,
+      padding: 16,
+    },
+    circleHeroEyebrow: {
+      color: "rgba(201,151,90,0.62)",
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.6,
+      marginBottom: 4,
+      textTransform: "uppercase",
+    },
+    circleHeroTitle: {
+      color: T.text,
+      fontSize: 18,
+      fontWeight: "900",
+      marginBottom: 3,
+    },
+    circleHeroSub: {
+      color: T.text3,
+      fontSize: 12,
+      lineHeight: 18,
+      maxWidth: 520,
+    },
+    circleHeroBadge: {
+      alignItems: "center",
+      backgroundColor: "rgba(192,57,43,0.12)",
+      borderColor: "rgba(192,57,43,0.28)",
+      borderRadius: 16,
+      borderWidth: 1,
+      minWidth: 64,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    circleHeroBadgeText: {
+      color: T.gold2,
+      fontSize: 20,
+      fontWeight: "900",
+    },
+    circleHeroBadgeLabel: {
+      color: T.text3,
+      fontSize: 10,
+      fontWeight: "800",
+      marginTop: 1,
+      textTransform: "uppercase",
+    },
     memberBubble: {
       alignItems: "center",
       backgroundColor: T.card,
@@ -2763,6 +2928,13 @@ function createStyles(T: Palette) {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 7,
+    },
+    circleStatusLine: {
+      color: T.gold2,
+      fontSize: 12,
+      fontWeight: "800",
+      lineHeight: 18,
+      marginBottom: 12,
     },
     planMemberPill: {
       backgroundColor: "rgba(201,151,90,0.10)",
