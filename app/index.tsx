@@ -1,5 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { Redirect, useRouter } from "expo-router";
+import { onAuthStateChanged } from "firebase/auth";
+import { useEffect, useState } from "react";
 import {
   Image,
   Platform,
@@ -10,6 +12,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+
+import { firebaseAuth } from "@/firebase/config";
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1400&q=85";
 const KITTY_IMAGE = "https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=900&q=85";
@@ -28,7 +32,38 @@ export default function IndexScreen() {
     return <Redirect href="/login" />;
   }
 
+  return <WebEntry />;
+}
+
+function WebEntry() {
+  const [authState, setAuthState] = useState<"checking" | "guest" | "user">("checking");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setAuthState(user ? "user" : "guest");
+    });
+
+    return unsubscribe;
+  }, []);
+
+  if (authState === "checking") {
+    return <EntryLoading />;
+  }
+
+  if (authState === "user") {
+    return <Redirect href="/home" />;
+  }
+
   return <WebHome />;
+}
+
+function EntryLoading() {
+  return (
+    <View style={styles.loadingRoot}>
+      <Image source={require("../assets/logo-wide.png")} style={styles.loadingLogo} resizeMode="contain" />
+      <Text style={styles.loadingText}>Preparing your Momentra...</Text>
+    </View>
+  );
 }
 
 function WebHome() {
@@ -228,6 +263,16 @@ function FeaturePanel({
 }
 
 const styles = StyleSheet.create({
+  loadingRoot: {
+    alignItems: "center",
+    backgroundColor: "#050302",
+    flex: 1,
+    gap: 14,
+    justifyContent: "center",
+    minHeight: "100vh" as never,
+  },
+  loadingLogo: { height: 120, width: 280 },
+  loadingText: { color: "rgba(242,232,217,0.68)", fontSize: 14, fontWeight: "700", letterSpacing: 0.4 },
   root: { backgroundColor: "#050302", flex: 1, maxWidth: "100vw" as never, overflowX: "hidden" as never },
   page: { backgroundColor: "#050302", maxWidth: "100vw" as never, overflowX: "hidden" as never, paddingBottom: 56 },
   hero: { minHeight: 620, overflow: "hidden", position: "relative" },
