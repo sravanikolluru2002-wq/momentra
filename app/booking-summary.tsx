@@ -18,6 +18,8 @@ import { supabase } from "@/lib/supabase";
 import { WebEnquiryScreen } from "@/components/web-enquiry-screen";
 import { whatsappCategoryFromOccasion } from "@/lib/whatsapp";
 import { firebaseAuth } from "@/firebase/config";
+import { createMomentraBooking } from "@/lib/supabase/bookings";
+import { createPaymentOrder } from "@/lib/supabase/payments";
 
 const KITTY_PARTY_IMAGE = require("../assets/kitty-party.png");
 
@@ -182,6 +184,41 @@ export default function BookingSummaryScreen() {
       console.error("BOOKING SAVE ERROR FULL:", JSON.stringify(error, null, 2));
       setSaving(false);
       return;
+    }
+
+    try {
+      const newBooking = await createMomentraBooking({
+        bookingDate: date,
+        bookingTime: time,
+        city: experience.city ?? "Vizag",
+        estimatedTotal: total,
+        guests,
+        metadata: {
+          legacyStatus: isSplitBooking ? "pending_group_payment" : "confirmed",
+          request,
+          source: "booking_summary",
+        },
+        packageId: undefined,
+        selectedAddons: selectedAddOns.map((addOn) => addOn.name),
+        selectedRequirements: experience.requirements ?? [],
+        status: isSplitBooking ? "pending_payment" : "confirmed",
+        title: experienceTitle,
+      }, firebaseAuth.currentUser);
+
+      await createPaymentOrder({
+        amount: total,
+        bookingId: newBooking.id,
+        metadata: {
+          legacyPaymentId: payment.payment_id,
+          legacyPaymentStatus: payment.payment_status,
+          splitBooking: isSplitBooking,
+        },
+        provider: isSplitBooking ? "manual" : "razorpay",
+        providerOrderId: payment.payment_id,
+        status: payment.payment_status === "paid" ? "paid" : "created",
+      }, firebaseAuth.currentUser);
+    } catch (backendError) {
+      console.error("MOMENTRA OPERATIONAL BOOKING SAVE ERROR:", JSON.stringify(backendError, null, 2));
     }
 
     router.replace({

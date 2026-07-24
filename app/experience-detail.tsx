@@ -570,7 +570,7 @@ export default function ExperienceDetailScreen() {
           </Text>
           <Pressable onPress={continueRequest} style={[styles.cta, { backgroundColor: theme.red }]}>
             <Text style={styles.ctaText}>{Platform.OS === "web" ? "Request Availability" : "Continue to Summary"}</Text>
-            <Text style={styles.ctaPrice}>{Platform.OS === "web" ? "Talk to Momentra" : formatINR(total)}</Text>
+            {Platform.OS !== "web" ? <Text style={styles.ctaPrice}>{formatINR(total)}</Text> : null}
           </Pressable>
         </View>
       </ScrollView>
