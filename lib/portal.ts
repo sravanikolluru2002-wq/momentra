@@ -50,6 +50,24 @@ export type PayoutBatchRow = {
   updated_at: string;
 };
 
+export type MomentraEnquiryRow = {
+  admin_note: string | null;
+  booking_date: string | null;
+  booking_time: string | null;
+  city: string | null;
+  created_at: string;
+  enquiry_type: string;
+  estimated_total: number | null;
+  experience_title: string | null;
+  guests: number | null;
+  id: string;
+  notes: string | null;
+  phone_number: string | null;
+  priority: string;
+  status: string;
+  venue: string | null;
+};
+
 const CATEGORY_FEES: Record<string, number> = {
   banquet: 2999,
   cafe: 1999,

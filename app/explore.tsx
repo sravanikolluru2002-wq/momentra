@@ -41,6 +41,7 @@ import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
 import { supabase } from "@/lib/supabase";
 
 const { width, height } = Dimensions.get("window");
+const ANIMATE_WITH_NATIVE_DRIVER = Platform.OS !== "web";
 
 const DARK = {
   bg: "#0D0905",
@@ -381,19 +382,19 @@ export default function ExploreScreen() {
 
   function openFilterSheet() {
     setFilterOpen(true);
-    Animated.spring(sheetY, {
-      friction: 11,
-      tension: 65,
-      toValue: 0,
-      useNativeDriver: true,
-    }).start();
+      Animated.spring(sheetY, {
+        friction: 11,
+        tension: 65,
+        toValue: 0,
+        useNativeDriver: ANIMATE_WITH_NATIVE_DRIVER,
+      }).start();
   }
 
   function closeFilterSheet() {
     Animated.timing(sheetY, {
       duration: 320,
       toValue: height,
-      useNativeDriver: true,
+      useNativeDriver: ANIMATE_WITH_NATIVE_DRIVER,
     }).start(() => setFilterOpen(false));
   }
 

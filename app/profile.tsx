@@ -326,7 +326,8 @@ export default function ProfileScreen() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const userPhone = user?.phoneNumber ?? user?.phone ?? "";
-  const displayName = profile?.full_name?.trim() || user?.displayName || "Momentra Customer";
+  const savedProfileName = profile?.full_name?.trim() || user?.displayName?.trim() || "";
+  const displayName = savedProfileName || (userPhone ? formatProfilePhone(userPhone) : "Your Profile");
   const avatarUrl = profile?.avatar_url?.trim() || "";
   const profileCity = profile?.city?.trim() || city;
   const memberSince = formatMemberSince(profile?.created_at);
@@ -376,8 +377,9 @@ export default function ProfileScreen() {
 
     void refreshCircleData(profile.id);
 
+    const channelId = `momentra-circle-${profile.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel(`momentra-circle-${profile.id}`)
+      .channel(channelId)
       .on("postgres_changes", { event: "*", schema: "public", table: "profile_circle_requests" }, () => {
         void refreshCircleData(profile.id);
       })
@@ -407,7 +409,7 @@ export default function ProfileScreen() {
 
   function openScreen(screen: ScreenId) {
     if (screen === "edit") {
-      setEditFullName(displayName);
+      setEditFullName(savedProfileName);
       setEditCity(profileCity);
       setEditPhone(profile?.phone_number || userPhone);
     }
@@ -1833,7 +1835,13 @@ async function uploadProfilePhoto(profileId: string, file: File) {
 }
 
 function profileDisplayName(profile?: PublicCircleProfile | null) {
-  return profile?.full_name?.trim() || "Momentra Customer";
+  return profile?.full_name?.trim() || "Circle Member";
+}
+
+function formatProfilePhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 4) return "Your Profile";
+  return `User ${digits.slice(-4)}`;
 }
 
 function profileFirstName(profile?: PublicCircleProfile | null) {

@@ -28,6 +28,8 @@ import {
 
 import { DARK, EXPERIENCES, formatINR, getExperience } from "@/constants/experiences";
 import type { AddOn, Experience } from "@/constants/experiences";
+import { firebaseAuth } from "@/firebase/config";
+import { createMomentraEnquiry } from "@/lib/supabase/enquiries";
 import { supabase } from "@/lib/supabase";
 import { openWhatsAppMessage } from "@/lib/whatsapp";
 
@@ -118,7 +120,35 @@ export default function ExperienceDetailScreen() {
   const total = experience.price + addOnTotal;
   const activeFoodMenu = FOOD_MENU.find((item) => item.title === activeFoodCategory) ?? FOOD_MENU[0];
 
-  function requestAvailability() {
+  async function requestAvailability() {
+    try {
+      await createMomentraEnquiry({
+        addOns: experience.addOns
+          .filter((addOn) => selectedAddOns.includes(addOn.id))
+          .map((addOn) => getAddOnLabel(addOn)),
+        bookingDate: date,
+        bookingTime: time,
+        city: experience.city,
+        enquiryType: "experience_availability_request",
+        estimatedTotal: total,
+        experienceId: experience.id,
+        experienceTitle: experience.title,
+        foodItems: selectedFoodItems,
+        guests,
+        notes: specialRequest,
+        occasionId: experience.occasionId,
+        requirements: selectedRequirements,
+        source: "experience_detail",
+        summary: {
+          destination: experience.occasionId === "picnic" ? destination : "",
+          serviceMode,
+        },
+        venue: experience.venue,
+      }, firebaseAuth.currentUser);
+    } catch (error) {
+      console.error("[Momentra enquiry] availability save failed", error);
+    }
+
     openWhatsAppMessage(
       buildAvailabilityMessage({
         addOns: experience.addOns

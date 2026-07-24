@@ -53,12 +53,6 @@ function WebHome() {
         <View style={[styles.nav, phone && styles.navPhone]}>
           <Image source={require("../assets/logo-wide.png")} style={[styles.logo, phone && styles.logoPhone]} resizeMode="contain" />
           <View style={[styles.navActions, phone && styles.navActionsPhone]}>
-            <Pressable onPress={() => router.push("/admin-login" as never)} style={[styles.adminLink, phone && styles.portalLinkPhone]}>
-              <Text style={[styles.adminText, phone && styles.navTextPhone]}>Admin Login</Text>
-            </Pressable>
-            <Pressable onPress={() => router.push("/partner-login" as never)} style={[styles.partnerLink, phone && styles.portalLinkPhone]}>
-              <Text style={[styles.partnerText, phone && styles.navTextPhone]}>Partner Login</Text>
-            </Pressable>
             <Pressable onPress={() => router.push("/login" as never)} style={[styles.loginLink, phone && styles.loginLinkPhone]}>
               <Text style={[styles.loginText, phone && styles.navTextPhone]}>Login / Continue</Text>
             </Pressable>

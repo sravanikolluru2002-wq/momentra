@@ -94,6 +94,20 @@ export default function BookingSummaryScreen() {
           { label: "Estimated Plan", value: formatINR(total) },
         ]}
         title="Plan This Experience"
+        trackingPayload={{
+          addOns: selectedAddOns.map((addOn) => addOn.name),
+          bookingDate: date,
+          bookingTime: time,
+          enquiryType: "experience_booking_request",
+          estimatedTotal: total,
+          experienceId: experience.id,
+          experienceTitle,
+          guests,
+          notes: request,
+          occasionId: experience.occasionId,
+          source: "booking_summary_web",
+          venue,
+        }}
         whatsappCategory={whatsappCategoryFromOccasion(experience.occasionId)}
       />
     );

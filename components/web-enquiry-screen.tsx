@@ -1,7 +1,10 @@
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { DARK } from "@/constants/experiences";
+import { firebaseAuth } from "@/firebase/config";
+import { createMomentraEnquiry, MomentraEnquiryPayload } from "@/lib/supabase/enquiries";
 import { openWhatsApp, WhatsAppCategory } from "@/lib/whatsapp";
 
 type SummaryItem = {
@@ -16,6 +19,7 @@ type WebEnquiryScreenProps = {
   subtitle: string;
   summary?: SummaryItem[];
   title: string;
+  trackingPayload?: MomentraEnquiryPayload;
   whatsappCategory?: WhatsAppCategory;
 };
 
@@ -26,9 +30,35 @@ export function WebEnquiryScreen({
   subtitle,
   summary = [],
   title,
+  trackingPayload,
   whatsappCategory = "general",
 }: WebEnquiryScreenProps) {
   const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [savedMessage, setSavedMessage] = useState("");
+
+  async function handlePrimaryAction() {
+    if (saving) return;
+
+    setSaving(true);
+    setSavedMessage("");
+
+    try {
+      await createMomentraEnquiry({
+        enquiryType: trackingPayload?.enquiryType ?? whatsappCategory,
+        source: trackingPayload?.source ?? "web_enquiry",
+        summary: Object.fromEntries(summary.map((item) => [item.label, item.value])),
+        ...trackingPayload,
+      }, firebaseAuth.currentUser);
+      setSavedMessage("Request saved. Opening WhatsApp for faster coordination.");
+    } catch (error) {
+      console.error("[Momentra enquiry] save failed", error);
+      setSavedMessage("WhatsApp will open now. We could not save the request yet.");
+    } finally {
+      setSaving(false);
+      openWhatsApp(whatsappCategory, "WEB ENQUIRY WHATSAPP ERROR");
+    }
+  }
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: DARK.bg }]}>
@@ -56,11 +86,12 @@ export function WebEnquiryScreen({
             Momentra coordinates the experience end-to-end. Share your date, group size, budget, and preferences, and our team will help confirm availability before anything is finalized.
           </Text>
         </View>
+        {savedMessage ? <Text style={styles.savedMessage}>{savedMessage}</Text> : null}
       </ScrollView>
 
       <View style={[styles.footer, { backgroundColor: DARK.bg, borderTopColor: DARK.border }]}>
-        <Pressable onPress={() => openWhatsApp(whatsappCategory, "WEB ENQUIRY WHATSAPP ERROR")} style={[styles.primary, { backgroundColor: DARK.red }]}>
-          <Text style={styles.primaryText}>{primaryLabel}</Text>
+        <Pressable onPress={handlePrimaryAction} style={[styles.primary, { backgroundColor: DARK.red }]}>
+          <Text style={styles.primaryText}>{saving ? "Saving request..." : primaryLabel}</Text>
         </Pressable>
         <Pressable onPress={() => router.push(secondaryHref as never)} style={[styles.secondary, { borderColor: DARK.border }]}>
           <Text style={[styles.secondaryText, { color: DARK.gold }]}>{secondaryLabel}</Text>
@@ -84,6 +115,7 @@ const styles = StyleSheet.create({
   promise: { backgroundColor: "rgba(201,151,90,0.06)", borderRadius: 16, borderWidth: 1, maxWidth: 620, padding: 16, width: "100%" },
   promiseTitle: { color: "rgba(242,232,217,0.36)", fontSize: 10, fontWeight: "900", letterSpacing: 2, marginBottom: 8 },
   promiseText: { fontSize: 12, lineHeight: 20 },
+  savedMessage: { color: "#C9975A", fontSize: 12, fontWeight: "800", marginTop: 12, maxWidth: 620, textAlign: "center" },
   footer: { borderTopWidth: 1, bottom: 0, gap: 10, left: 0, padding: 18, position: "absolute", right: 0 },
   primary: { alignItems: "center", borderRadius: 16, padding: 16 },
   primaryText: { color: "#fff", fontSize: 14, fontWeight: "900" },

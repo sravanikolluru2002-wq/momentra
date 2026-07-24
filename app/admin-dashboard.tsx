@@ -8,6 +8,7 @@ import {
   AdminProfileRow,
   formatCurrency,
   formatShortDate,
+  MomentraEnquiryRow,
   PartnerProfileRow,
   PayoutBatchRow,
   PortalTone,
@@ -16,6 +17,7 @@ import {
   SupportTicketRow,
 } from "@/lib/portal";
 import { hasSupabaseEnv, supabase } from "@/lib/supabase";
+import { listMomentraEnquiries, updateMomentraEnquiryStatus } from "@/lib/supabase/enquiries";
 
 const DARK = {
   bg: "#0D0905",
@@ -65,7 +67,7 @@ const LIGHT = {
   redBg: "rgba(184,50,37,0.1)",
 };
 
-type AdminScreen = "finance" | "ops" | "support";
+type AdminScreen = "enquiries" | "finance" | "ops" | "support";
 
 export default function AdminDashboardScreen() {
   const { adminId } = useLocalSearchParams<{ adminId?: string }>();
@@ -76,9 +78,11 @@ export default function AdminDashboardScreen() {
   const [screen, setScreen] = useState<AdminScreen>("ops");
   const [adminProfile, setAdminProfile] = useState<AdminProfileRow | null>(null);
   const [partners, setPartners] = useState<PartnerProfileRow[]>([]);
+  const [enquiries, setEnquiries] = useState<MomentraEnquiryRow[]>([]);
   const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
   const [payouts, setPayouts] = useState<PayoutBatchRow[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
+  const [selectedEnquiryId, setSelectedEnquiryId] = useState<string>("");
   const [selectedTicketId, setSelectedTicketId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -95,16 +99,17 @@ export default function AdminDashboardScreen() {
       setLoading(true);
       setError("");
 
-      const [adminResult, partnersResult, ticketsResult, payoutsResult] = await Promise.all([
+      const [adminResult, partnersResult, ticketsResult, payoutsResult, enquiriesResult] = await Promise.all([
         adminId ? supabase.from("admin_profiles").select("*").eq("id", adminId).maybeSingle() : Promise.resolve({ data: null, error: null }),
         supabase.from("partner_profiles").select("*").order("submitted_at", { ascending: false }),
         supabase.from("support_tickets").select("*").order("created_at", { ascending: false }),
         supabase.from("payout_batches").select("*").order("created_at", { ascending: false }),
+        listMomentraEnquiries().then((data) => ({ data, error: null })).catch((error) => ({ data: [], error })),
       ]);
 
       if (!active) return;
 
-      const failing = adminResult.error ?? partnersResult.error ?? ticketsResult.error ?? payoutsResult.error;
+      const failing = adminResult.error ?? partnersResult.error ?? ticketsResult.error ?? payoutsResult.error ?? enquiriesResult.error;
 
       if (failing) {
         setError(failing.message);
@@ -112,11 +117,14 @@ export default function AdminDashboardScreen() {
         const nextPartners = (partnersResult.data ?? []) as PartnerProfileRow[];
         const nextTickets = (ticketsResult.data ?? []) as SupportTicketRow[];
         const nextPayouts = (payoutsResult.data ?? []) as PayoutBatchRow[];
+        const nextEnquiries = (enquiriesResult.data ?? []) as MomentraEnquiryRow[];
         setAdminProfile((adminResult.data as AdminProfileRow | null) ?? null);
         setPartners(nextPartners);
         setTickets(nextTickets);
         setPayouts(nextPayouts);
+        setEnquiries(nextEnquiries);
         setSelectedPartnerId((current) => current || nextPartners[0]?.id || "");
+        setSelectedEnquiryId((current) => current || nextEnquiries[0]?.id || "");
         setSelectedTicketId((current) => current || nextTickets[0]?.id || "");
       }
 
@@ -126,7 +134,7 @@ export default function AdminDashboardScreen() {
     void loadData();
 
     const channel = supabase
-      .channel("admin-portal")
+      .channel(`admin-portal-${Date.now()}-${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "partner_profiles" }, async () => {
         const refreshed = await supabase.from("partner_profiles").select("*").order("submitted_at", { ascending: false });
         if (!refreshed.error && active) setPartners((refreshed.data ?? []) as PartnerProfileRow[]);
@@ -139,6 +147,10 @@ export default function AdminDashboardScreen() {
         const refreshed = await supabase.from("payout_batches").select("*").order("created_at", { ascending: false });
         if (!refreshed.error && active) setPayouts((refreshed.data ?? []) as PayoutBatchRow[]);
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "momentra_enquiries" }, async () => {
+        const refreshed = await listMomentraEnquiries();
+        if (active) setEnquiries(refreshed as MomentraEnquiryRow[]);
+      })
       .subscribe();
 
     return () => {
@@ -148,16 +160,17 @@ export default function AdminDashboardScreen() {
   }, [adminId]);
 
   const selectedPartner = partners.find((partner) => partner.id === selectedPartnerId) ?? partners[0] ?? null;
+  const selectedEnquiry = enquiries.find((enquiry) => enquiry.id === selectedEnquiryId) ?? enquiries[0] ?? null;
   const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? tickets[0] ?? null;
 
   const stats = useMemo(() => {
     return [
       ["Pending review", String(partners.filter((partner) => statusTone(partner.status) === "amber").length), "amber" as PortalTone],
+      ["New enquiries", String(enquiries.filter((enquiry) => enquiry.status === "new").length), "blue" as PortalTone],
       ["Approved profiles", String(partners.filter((partner) => statusTone(partner.kyc_status) === "green").length), "green" as PortalTone],
       ["Open tickets", String(tickets.filter((ticket) => statusTone(ticket.status) !== "green").length), "blue" as PortalTone],
-      ["Held payouts", String(payouts.filter((payout) => statusTone(payout.status) === "amber").length), "red" as PortalTone],
     ];
-  }, [partners, payouts, tickets]);
+  }, [enquiries, partners, tickets]);
 
   async function updatePartner(partnerId: string, patch: Partial<PartnerProfileRow>) {
     const { error: updateError } = await supabase.from("partner_profiles").update(patch).eq("id", partnerId);
@@ -167,6 +180,16 @@ export default function AdminDashboardScreen() {
   async function updateTicket(ticketId: string, patch: Partial<SupportTicketRow>) {
     const { error: updateError } = await supabase.from("support_tickets").update(patch).eq("id", ticketId);
     if (updateError) setError(updateError.message);
+  }
+
+  async function updateEnquiry(enquiryId: string, status: string, adminNote?: string) {
+    try {
+      await updateMomentraEnquiryStatus(enquiryId, { adminNote, status });
+      const refreshed = await listMomentraEnquiries();
+      setEnquiries(refreshed as MomentraEnquiryRow[]);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Could not update enquiry.");
+    }
   }
 
   async function updatePayouts(status: string, releaseEta: string) {
@@ -203,6 +226,7 @@ export default function AdminDashboardScreen() {
           <View style={styles.sidebarScroll}>
             {[
               ["Operations", "ops"],
+              ["Enquiries", "enquiries"],
               ["Finance", "finance"],
               ["Support", "support"],
             ].map(([label, key]) => {
@@ -294,6 +318,58 @@ export default function AdminDashboardScreen() {
                       <ActionButton label="Request docs" onPress={() => updatePartner(selectedPartner.id, { admin_note: "Additional documents requested.", kyc_status: "needs docs", status: "pending" })} theme={theme} tone="purple" />
                       <ActionButton label="Reject profile" onPress={() => updatePartner(selectedPartner.id, { admin_note: "Profile rejected by admin.", kyc_status: "rejected", status: "rejected" })} theme={theme} tone="red" />
                       <ActionButton label="Publish profile" onPress={() => updatePartner(selectedPartner.id, { status: "approved", visibility_status: "live" })} theme={theme} tone="blue" />
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {screen === "enquiries" ? (
+              <View style={[styles.twoCol, compact && styles.stack]}>
+                <View style={styles.leftCol}>
+                  {enquiries.length ? enquiries.map((enquiry) => (
+                    <Pressable
+                      key={enquiry.id}
+                      onPress={() => setSelectedEnquiryId(enquiry.id)}
+                      style={[styles.adminCard, { backgroundColor: theme.card, borderColor: theme.border }, selectedEnquiryId === enquiry.id && { borderColor: theme.gold, borderWidth: 1.5 }]}
+                    >
+                      <Text style={[styles.vendorName, { color: theme.text }]}>{enquiry.experience_title || prettifyStatus(enquiry.enquiry_type)}</Text>
+                      <Text style={[styles.vendorMeta, { color: theme.text3 }]}>
+                        {enquiry.phone_number || "No phone"} | {formatShortDate(enquiry.created_at)}
+                      </Text>
+                      <View style={styles.badgeRow}>
+                        <StatusBadge label={prettifyStatus(enquiry.status)} theme={theme} tone={statusTone(enquiry.status)} />
+                        <StatusBadge label={prettifyStatus(enquiry.priority)} theme={theme} tone={statusTone(enquiry.priority)} />
+                      </View>
+                    </Pressable>
+                  )) : (
+                    <View style={[styles.adminCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                      <Text style={[styles.vendorName, { color: theme.text }]}>No enquiries yet</Text>
+                      <Text style={[styles.vendorMeta, { color: theme.text3 }]}>Customer requests will appear here after they tap Request Availability.</Text>
+                    </View>
+                  )}
+                </View>
+
+                {selectedEnquiry ? (
+                  <View style={[styles.detailsPanel, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Text style={[styles.panelTitle, { color: theme.text }]}>Customer enquiry</Text>
+                    <Text style={[styles.detailsHeading, { color: theme.text }]}>{selectedEnquiry.experience_title || prettifyStatus(selectedEnquiry.enquiry_type)}</Text>
+                    <Text style={[styles.detailsSubheading, { color: theme.text3 }]}>
+                      {selectedEnquiry.venue || "Venue not selected"} | {selectedEnquiry.booking_date || "Date open"} | {selectedEnquiry.guests ? `${selectedEnquiry.guests} guests` : "Guest count open"}
+                    </Text>
+                    <View style={styles.badgeRow}>
+                      <StatusBadge label={prettifyStatus(selectedEnquiry.status)} theme={theme} tone={statusTone(selectedEnquiry.status)} />
+                      {selectedEnquiry.estimated_total ? <StatusBadge label={formatCurrency(selectedEnquiry.estimated_total)} theme={theme} tone="amber" /> : null}
+                    </View>
+                    <View style={[styles.notePanel, { backgroundColor: theme.bg3, borderColor: theme.border }]}>
+                      <Text style={[styles.noteTitle, { color: theme.text3 }]}>Customer note</Text>
+                      <Text style={[styles.noteText, { color: theme.text2 }]}>{selectedEnquiry.notes || "No note added."}</Text>
+                    </View>
+                    <View style={styles.actionRow}>
+                      <ActionButton label="Mark contacted" onPress={() => updateEnquiry(selectedEnquiry.id, "contacted", "Customer contacted by admin team.")} theme={theme} tone="blue" />
+                      <ActionButton label="Mark quoted" onPress={() => updateEnquiry(selectedEnquiry.id, "quoted", "Quote shared with customer.")} theme={theme} tone="purple" />
+                      <ActionButton label="Confirm" onPress={() => updateEnquiry(selectedEnquiry.id, "confirmed", "Enquiry confirmed by operations.")} theme={theme} tone="green" />
+                      <ActionButton label="Cancel" onPress={() => updateEnquiry(selectedEnquiry.id, "cancelled", "Enquiry cancelled by operations.")} theme={theme} tone="red" />
                     </View>
                   </View>
                 ) : null}
@@ -423,6 +499,7 @@ function ActionButton({
 }
 
 function screenTitle(screen: AdminScreen) {
+  if (screen === "enquiries") return "Enquiries";
   if (screen === "finance") return "Finance Control";
   if (screen === "support") return "Support Desk";
   return "Operations Overview";

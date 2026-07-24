@@ -34,6 +34,7 @@ import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
 import { openWhatsApp as openMomentraWhatsApp, WhatsAppCategory } from "@/lib/whatsapp";
 
 const TREND_W = 175;
+const ANIMATE_WITH_NATIVE_DRIVER = Platform.OS !== "web";
 
 type OccasionItem = {
   desc: string;
@@ -98,12 +99,12 @@ function MobileHomeScreen() {
   const occasionCardWidth = (width - 32 - 9 * (occasionColumns - 1)) / occasionColumns;
 
   useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { duration: 900, toValue: 1.5, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { duration: 900, toValue: 1, useNativeDriver: true }),
-      ])
-    );
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { duration: 900, toValue: 1.5, useNativeDriver: ANIMATE_WITH_NATIVE_DRIVER }),
+          Animated.timing(pulseAnim, { duration: 900, toValue: 1, useNativeDriver: ANIMATE_WITH_NATIVE_DRIVER }),
+        ])
+      );
 
     animation.start();
     return () => animation.stop();
@@ -146,12 +147,12 @@ function MobileHomeScreen() {
     const Icon = getOccasionIcon(item.id);
 
     return (
-      <Pressable
-        onPress={() => openOccasion(item)}
-        onPressIn={() => Animated.spring(scale, { speed: 50, toValue: 0.95, useNativeDriver: true }).start()}
-        onPressOut={() => Animated.spring(scale, { speed: 30, toValue: 1, useNativeDriver: true }).start()}
-        style={[styles.occCard, { width: occasionCardWidth }]}
-      >
+        <Pressable
+          onPress={() => openOccasion(item)}
+          onPressIn={() => Animated.spring(scale, { speed: 50, toValue: 0.95, useNativeDriver: ANIMATE_WITH_NATIVE_DRIVER }).start()}
+          onPressOut={() => Animated.spring(scale, { speed: 30, toValue: 1, useNativeDriver: ANIMATE_WITH_NATIVE_DRIVER }).start()}
+          style={[styles.occCard, { width: occasionCardWidth }]}
+        >
         <Animated.View style={[styles.occInner, { transform: [{ scale }] }]}>
           <Image source={{ uri: item.img }} style={styles.occImg} resizeMode="cover" />
           <LinearGradient

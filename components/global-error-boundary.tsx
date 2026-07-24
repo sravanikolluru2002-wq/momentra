@@ -21,6 +21,11 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   }
 
   reset = () => {
+    if (typeof window !== "undefined") {
+      window.location.reload();
+      return;
+    }
+
     this.setState({ error: null });
   };
 
@@ -33,9 +38,9 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       <View style={styles.screen}>
         <View style={styles.card}>
           <Text style={styles.eyebrow}>MOMENTRA</Text>
-          <Text style={styles.title}>Something needs a quick refresh.</Text>
+          <Text style={styles.title}>Refresh this screen.</Text>
           <Text style={styles.body}>
-            We could not load this screen safely. Please try again, or return to the login page.
+            A temporary screen issue interrupted loading. Refresh once and Momentra will reopen cleanly.
           </Text>
           <Pressable onPress={this.reset} style={styles.button}>
             <Text style={styles.buttonText}>Try again</Text>

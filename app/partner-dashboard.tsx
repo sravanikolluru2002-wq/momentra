@@ -117,7 +117,7 @@ export default function PartnerDashboardScreen() {
     void loadPortalData();
 
     const channel = supabase
-      .channel(`partner-portal-${partnerId}`)
+      .channel(`partner-portal-${partnerId}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "*", filter: `id=eq.${partnerId}`, schema: "public", table: "partner_profiles" }, (payload) => {
         if (payload.new) setPartner(payload.new as PartnerProfileRow);
       })

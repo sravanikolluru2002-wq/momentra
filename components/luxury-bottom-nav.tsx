@@ -94,7 +94,7 @@ function LuxuryNavItem({
       mass: 0.8,
       stiffness: 170,
       toValue: active ? 1 : 0,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
     }).start();
   }, [active, progress]);
 
