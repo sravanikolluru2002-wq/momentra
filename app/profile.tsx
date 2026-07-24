@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
@@ -82,6 +83,8 @@ type MockWallet = {
   transactions: WalletTransaction[];
   used: number;
 };
+
+const PROFILE_CACHE_PREFIX = "momentra.customer.profile.";
 const DARK = {
   bg: "#0d0905",
   bg2: "#1a0e08",
@@ -285,7 +288,7 @@ export default function ProfileScreen() {
   const [user, setUser] = useState<User | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [, setProfileLoading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [activeScreen, setActiveScreen] = useState<ScreenId>("main");
@@ -329,7 +332,7 @@ export default function ProfileScreen() {
   const savedProfileName = profile?.full_name?.trim() || user?.displayName?.trim() || "";
   const displayName = savedProfileName || (userPhone ? formatProfilePhone(userPhone) : "Your Profile");
   const avatarUrl = profile?.avatar_url?.trim() || "";
-  const profileCity = profile?.city?.trim() || city;
+  const profileCity = profile?.city?.trim() || city || "Vizag";
   const memberSince = formatMemberSince(profile?.created_at);
   const wallet = walletPreviewState === "active" ? mockWallet : emptyMockWallet;
   const momentraId = profile?.momentra_id || (profile?.id ? makeFallbackMomentraId(profile.id) : "MOM-LOADING");
@@ -361,6 +364,7 @@ export default function ProfileScreen() {
 
       setUser(firebaseUser);
       setLoadingSession(false);
+      void hydrateProfileFromCache(firebaseUser);
       void loadCustomerProfile(firebaseUser);
     });
 
@@ -553,6 +557,17 @@ export default function ProfileScreen() {
       .finally(() => setCircleActionBusy(null));
   }
 
+  async function hydrateProfileFromCache(firebaseUser: User) {
+    const cachedProfile = await readCachedCustomerProfile(firebaseUser.uid);
+    if (!cachedProfile?.id) return;
+
+    setProfile((current) => current ?? cachedProfile);
+    setCity((currentCity) => cachedProfile.city?.trim() || currentCity || "Vizag");
+    setEditFullName((currentName) => currentName || cachedProfile.full_name?.trim() || firebaseUser.displayName || "");
+    setEditCity((currentCity) => currentCity || cachedProfile.city?.trim() || "Vizag");
+    setEditPhone((currentPhone) => currentPhone || cachedProfile.phone_number || firebaseUser.phoneNumber || "");
+  }
+
   async function loadCustomerProfile(firebaseUser: User) {
     setProfileLoading(true);
 
@@ -562,6 +577,7 @@ export default function ProfileScreen() {
       const completeProfile = await getCustomerProfile(row.id).catch(() => row);
 
       setProfile(completeProfile);
+      void cacheCustomerProfile(firebaseUser.uid, completeProfile);
       setCity(completeProfile?.city?.trim() || "Vizag");
       setEditFullName(completeProfile?.full_name?.trim() || firebaseUser.displayName || "");
       setEditCity(completeProfile?.city?.trim() || "Vizag");
@@ -602,6 +618,7 @@ export default function ProfileScreen() {
       };
 
       setProfile(mergedProfile);
+      void cacheCustomerProfile(user.uid, mergedProfile);
       setCity(mergedProfile.city?.trim() || "Vizag");
       setEditFullName(mergedProfile.full_name?.trim() || cleanName);
       setEditCity(mergedProfile.city?.trim() || cleanCity);
@@ -646,6 +663,7 @@ export default function ProfileScreen() {
       const nextProfile = await updateCustomerProfileAvatar(profile.id, publicUrl);
 
       setProfile(nextProfile);
+      void cacheCustomerProfile(user.uid, nextProfile);
       showToast("Profile photo saved");
     } catch (error) {
       console.error("[Momentra profile] avatar upload failed", error);
@@ -662,6 +680,7 @@ export default function ProfileScreen() {
     try {
       const nextProfile = await updateCustomerProfileAvatar(profile.id, null);
       setProfile(nextProfile);
+      if (user) void cacheCustomerProfile(user.uid, nextProfile);
       showToast("Profile photo removed");
     } catch (error) {
       console.error("[Momentra profile] avatar remove failed", error);
@@ -737,7 +756,7 @@ export default function ProfileScreen() {
             </Pressable>
             <View style={styles.heroCopy}>
               <Text style={styles.heroName}>{displayName}</Text>
-              <Text style={styles.heroCity}>{profileLoading ? "Loading profile..." : profileCity || "Location not set"}</Text>
+              <Text style={styles.heroCity}>{profileCity || "Location not set"}</Text>
               <View style={styles.heroTags}>
                 <Pill label="Phone Verified" tone="green" T={T} styles={styles} />
                 <Pill label={`Member since ${memberSince}`} tone="gold" T={T} styles={styles} />
@@ -1804,6 +1823,28 @@ function CircleRequestRow({
 
 function makeFallbackMomentraId(profileId: string) {
   return `MOM-${profileId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+}
+
+function getProfileCacheKey(firebaseUid: string) {
+  return `${PROFILE_CACHE_PREFIX}${firebaseUid}`;
+}
+
+async function readCachedCustomerProfile(firebaseUid: string) {
+  try {
+    const cached = await AsyncStorage.getItem(getProfileCacheKey(firebaseUid));
+    if (!cached) return null;
+    return JSON.parse(cached) as CustomerProfile;
+  } catch {
+    return null;
+  }
+}
+
+async function cacheCustomerProfile(firebaseUid: string, profile: CustomerProfile) {
+  try {
+    await AsyncStorage.setItem(getProfileCacheKey(firebaseUid), JSON.stringify(profile));
+  } catch {
+    // Cache is best-effort only. Supabase remains the source of truth.
+  }
 }
 
 function pickImageFileFromBrowser() {
