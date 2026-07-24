@@ -22,6 +22,7 @@ import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { firebaseAuth } from "@/firebase/config";
 import { resetRecaptchaVerifier } from "@/lib/firebase/recaptcha";
+import { listMomentraBookingsForUser, type MomentraBookingRow } from "@/lib/supabase/bookings";
 import {
   CustomerProfileRow,
   ensureCustomerProfile,
@@ -227,6 +228,8 @@ const bookings = [
   },
 ];
 
+type ProfileBookingCard = (typeof bookings)[number];
+
 const cities = [
   { id: "vizag", emoji: "🌊", label: "Vizag", name: "Visakhapatnam (Vizag)", state: "Andhra Pradesh" },
   { id: "vijayawada", emoji: "🏙️", label: "Vijayawada", name: "Vijayawada", state: "Andhra Pradesh" },
@@ -298,6 +301,7 @@ export default function ProfileScreen() {
   const [editCity, setEditCity] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [bookingTab, setBookingTab] = useState("Upcoming");
+  const [realBookings, setRealBookings] = useState<ProfileBookingCard[]>([]);
   const [walletPreviewState, setWalletPreviewState] = useState<"active" | "empty">("active");
   const [circleMembers, setCircleMembers] = useState<CircleMember[]>([]);
   const [circleRequests, setCircleRequests] = useState<CircleRequest[]>([]);
@@ -366,6 +370,7 @@ export default function ProfileScreen() {
       setLoadingSession(false);
       void hydrateProfileFromCache(firebaseUser);
       void loadCustomerProfile(firebaseUser);
+      void loadRealBookings(firebaseUser);
     });
 
     return () => {
@@ -590,6 +595,16 @@ export default function ProfileScreen() {
       setEditPhone(firebaseUser.phoneNumber ?? "");
     } finally {
       setProfileLoading(false);
+    }
+  }
+
+  async function loadRealBookings(firebaseUser: User) {
+    try {
+      const rows = await listMomentraBookingsForUser(firebaseUser);
+      setRealBookings(rows.map(mapMomentraBookingToCard));
+    } catch (error) {
+      console.error("[Momentra bookings] profile load failed", error);
+      setRealBookings([]);
     }
   }
 
@@ -1432,6 +1447,8 @@ export default function ProfileScreen() {
   }
 
   function renderBookings() {
+    const visibleBookings = realBookings.length ? realBookings : bookings;
+
     return (
       <View>
         <View style={styles.bookingTabs}>
@@ -1448,7 +1465,7 @@ export default function ProfileScreen() {
             </Pressable>
           ))}
         </View>
-        {bookings.map((booking) => (
+        {visibleBookings.map((booking) => (
           <BookingCard key={booking.id} booking={booking} styles={styles} T={T} />
         ))}
       </View>
@@ -1746,6 +1763,31 @@ function EmptyProfileState({
 
 function formatMockINR(value: number) {
   return `₹${value.toLocaleString("en-IN")}`;
+}
+
+function mapMomentraBookingToCard(row: MomentraBookingRow): ProfileBookingCard {
+  const date = row.booking_date || "Date pending";
+  const time = row.booking_time || "Time pending";
+  const guests = row.guests ? `${row.guests} guests` : "Guests pending";
+  const venue = typeof row.metadata?.venue === "string" ? row.metadata.venue : row.city || "Momentra coordination";
+  const statusColors =
+    row.status === "cancelled"
+      ? ["rgba(139,26,16,0.30)", "rgba(20,6,2,0.90)"]
+      : row.status === "completed"
+        ? ["rgba(39,174,96,0.26)", "rgba(20,6,2,0.90)"]
+        : ["rgba(201,151,90,0.25)", "rgba(20,6,2,0.90)"];
+
+  return {
+    colors: statusColors,
+    date,
+    emoji: row.status === "completed" ? "✓" : "BK",
+    guests,
+    id: row.id,
+    price: formatMockINR(row.estimated_total),
+    time,
+    title: row.title,
+    venue,
+  };
 }
 
 function CircleProfileResult({
@@ -2124,7 +2166,7 @@ function PaymentRow({
   );
 }
 
-function BookingCard({ booking, styles, T }: { booking: (typeof bookings)[number]; styles: ReturnType<typeof createStyles>; T: Palette }) {
+function BookingCard({ booking, styles, T }: { booking: ProfileBookingCard; styles: ReturnType<typeof createStyles>; T: Palette }) {
   return (
     <Pressable style={({ pressed }) => [styles.bookingCard, pressed && styles.pressed]}>
       <LinearGradient colors={booking.colors} style={styles.bookingBanner}>

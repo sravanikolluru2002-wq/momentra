@@ -38,7 +38,7 @@ import {
 import { useMomentraTheme } from "@/contexts/momentra-theme";
 import { EXPERIENCES as CATALOG_EXPERIENCES } from "@/constants/experiences";
 import { LuxuryBottomNav } from "@/components/luxury-bottom-nav";
-import { supabase } from "@/lib/supabase";
+import { listCatalogPackages, type MomentraPackage } from "@/lib/supabase/catalog";
 
 const { width, height } = Dimensions.get("window");
 const ANIMATE_WITH_NATIVE_DRIVER = Platform.OS !== "web";
@@ -262,41 +262,25 @@ const SORT_OPTIONS = ["Popularity", "Price: Low to High", "Price: High to Low", 
 const RATING_OPTIONS = ["Any", "4.0+", "4.5+", "4.8+"];
 const KITTY_PARTY_IMAGE = require("../assets/kitty-party.png");
 
-type SupabaseExploreRow = {
-  badge?: string | null;
-  capacity?: number | string | null;
-  category?: string | null;
-  desc?: string | null;
-  description?: string | null;
-  id?: number | string | null;
-  image?: string | null;
-  image_url?: string | null;
-  occasionId?: string | null;
-  occasion_id?: string | null;
-  people?: number | string | null;
-  ppl?: number | string | null;
-  price?: number | string | null;
-  rating?: number | string | null;
-  tag?: string | null;
-  title?: string | null;
-  venue?: string | null;
-};
-
-function mapSupabaseExploreExperience(row: SupabaseExploreRow, index: number): ExploreExperience {
+function mapCatalogPackageToExploreExperience(row: MomentraPackage, index: number): ExploreExperience {
   const fallback = DEFAULT_EXPERIENCES[index % DEFAULT_EXPERIENCES.length];
+  const metadata = row.metadata ?? {};
+  const rating = typeof metadata.rating === "number" ? metadata.rating : fallback.rating;
+  const tag = typeof metadata.badge === "string" ? metadata.badge : fallback.tag;
+  const venue = typeof metadata.venue === "string" ? metadata.venue : fallback.venue;
 
   return {
-    cat: normalizeCategory(row.occasion_id ?? row.occasionId ?? row.category ?? fallback.cat),
-    desc: row.description || row.desc || fallback.desc,
-    detailId: String(row.id ?? fallback.detailId),
+    cat: normalizeCategory(row.occasion_id ?? fallback.cat),
+    desc: row.short_description || row.description || fallback.desc,
+    detailId: row.slug || fallback.detailId,
     id: index + 1000,
-    img: row.image_url || row.image || fallback.img,
-    ppl: toNumber(row.ppl ?? row.people ?? row.capacity, fallback.ppl),
+    img: row.image_url || fallback.img,
+    ppl: toNumber(row.minimum_guests ?? row.capacity, fallback.ppl),
     price: toNumber(row.price, fallback.price),
-    rating: toNumber(row.rating, fallback.rating),
-    tag: normalizeTag(row.tag ?? row.badge ?? fallback.tag),
+    rating,
+    tag: normalizeTag(tag),
     title: row.title || fallback.title,
-    venue: row.venue || fallback.venue,
+    venue,
   };
 }
 
@@ -356,29 +340,23 @@ export default function ExploreScreen() {
   useEffect(() => {
     let mounted = true;
 
-    async function fetchApprovedExperiences() {
-      const { data, error } = await supabase
-        .from("experiences")
-        .select("*")
-        .eq("status", "approved");
-
-      if (error) {
-        console.error("EXPERIENCE FETCH ERROR:", JSON.stringify(error, null, 2));
-        return;
-      }
-
-      const mapped = (data ?? []).map(mapSupabaseExploreExperience);
+    async function fetchCatalogPackages() {
+      const packages = await listCatalogPackages({ city: activeCity }).catch((error) => {
+        console.error("CATALOG PACKAGE FETCH ERROR:", JSON.stringify(error, null, 2));
+        return [];
+      });
+      const mapped = packages.map(mapCatalogPackageToExploreExperience);
       if (mounted && mapped.length > 0) {
         setExperiences(mergeExploreExperiences(mapped, DEFAULT_EXPERIENCES));
       }
     }
 
-    fetchApprovedExperiences();
+    fetchCatalogPackages();
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [activeCity]);
 
   function openFilterSheet() {
     setFilterOpen(true);

@@ -197,6 +197,7 @@ export default function BookingSummaryScreen() {
           legacyStatus: isSplitBooking ? "pending_group_payment" : "confirmed",
           request,
           source: "booking_summary",
+          venue,
         },
         packageId: undefined,
         selectedAddons: selectedAddOns.map((addOn) => addOn.name),
